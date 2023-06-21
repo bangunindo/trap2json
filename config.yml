@@ -1,0 +1,192 @@
+logger:
+  # debug will show all kinds of data being discarded
+  # trace will show all kinds of data being processed
+  # possible values: trace, debug, info, warn, error, fatal
+  level: info
+  # possible values: console, json
+  format: console
+prometheus:
+  enable: false
+  path: /metrics
+  port: 9285
+forwarders:
+    # id is used for logging and prometheus label
+  - id: print_to_stdout
+    ## these are common configs available for all type of forwarders
+    # the queue size for each forwarder, as forwarders are synchronous, this might be helpful
+    # for slow connections
+    queue_size: 10000
+    # populate agent_address with this oid/mib name prefix
+    # using oid is also possible
+    # agent_address_object_prefix: ".1.3.6.1.6.3.18.1.3"
+    agent_address_object_prefix: "SNMP-COMMUNITY-MIB::snmpTrapAddress"
+    # time format uses golang time layout
+    time_format: "2006-01-02T15:04:05.999999999Z07:00"
+    # all time fields will use this timezone for formatting
+    time_as_timezone: Asia/Jakarta
+    # json payload template
+    # variables is shown as if you don't use any templates
+    # possible variables: time, uptime_seconds, source_address, agent_address, pdu_version, snmp_version,
+    # community, enterprise_oid, enterprise_mib_name, user, context, description, trap_type,
+    # trap_sub_type, values, values_formatted
+    # values_formatted is the configured value_json_format (see below)
+    # possible functions:
+    # - valueSelect(value field *see below*, value regex pattern, value variable *should be "values"*)
+    json_format: '{"test": community, "test2": time, "values": values_formatted, "hex_value": valueSelect("oid", "^.1.3.6.1.2.1.63.1.2.1.7$", values).value_detail.hex}'
+    # snmp values/var_binds in json payload template
+    # possible variables: oid, mib_name, type, native_type, value, value_detail.raw, value_detail.hex
+    value_json_format: '{mib_name: value}'
+    # this tells template engine to merge values as one map/dict instead of an array
+    # make sure the keys don't have duplicates or else some data will be lost
+    value_json_is_flat: true
+    # if filter returns false, the message is dropped for this forwarder. this uses the same variables as json_format
+    filter: 'community == "public"'
+    # the forwarder to use, possible values: file, kafka, mqtt, trap, zabbix_trapper
+    # you can only define one in each forwarder
+    file:
+      # path for output log. it's formatted as newline delimited json logs
+      # if path is empty, it will print to stdout. stderr is not possible since it's used by logging
+      path: /output.log
+      # path: ""
+  - id: kafka
+    # kafka forwarder doesn't support sasl auth yet
+    kafka:
+      # list of kafka broker hosts
+      hosts:
+        - 127.0.0.1:9092
+        - 127.0.0.2:9092
+      # define how sent kafka messages ask for acknowledgements
+      # possible values: none, one, all
+      required_acks: "none"
+      # field name for kafka message's key. it's useful when you have multiple
+      # partitions on you kafka topic and want to route the same key to the same
+      # partition
+      key_field: ""
+      # your kafka topic
+      topic: ""
+  - id: mqtt
+    # kafka forwarder doesn't support auth yet
+    mqtt:
+      # list of mqtt broker hosts
+      hosts:
+        - tcp://127.0.0.1:1883
+        - ssl://127.0.0.1:8883
+        # websocket
+        - ws://127.0.0.1:80
+        # secure websocket
+        - wss://127.0.0.1:443
+      # according to the MQTT v3.1 specification, a client id must be no longer than 23 characters.
+      client_id: ""
+      username: ""
+      password: ""
+      ordered: true
+      # no custom cert supported yet
+      tls:
+        insecure_skip_verify: false
+      # your mqtt topic
+      topic: ""
+      # qos level for mqtt message
+      # supported values: 0, 1, 2
+      qos: 0
+  - id: snmp trap
+    # forward to another snmp trap receiver/nms
+    # trap uses snmptrap/snmpinform command line provided by net-snmp package
+    trap:
+      # count of workers to spawn which will execute the snmptrap/snmpinform command
+      # this is useful if your connection is slow or has high throughput of messages
+      # to forward to
+      workers: 1
+      # set enable_inform to true if you wish to use inform.
+      # inform will wait for ack message from nms before terminating
+      # not all NMS support this
+      enable_inform: false
+      host: 127.0.0.1:162
+      # define snmp version to use
+      # possible values: v1, v2c, v3
+      version: v2c
+      # community name to use for v1 and v2c snmp
+      community: public
+      # for snmp v3. omit privacy_passphrase if you wish to use authNoPriv.
+      # omit auth_passphrase if you wish to use noAuthNoPriv
+      user:
+        username: traptest
+        # set engine id to use
+        engine_id: ""
+        # possible values: MD5, SHA
+        auth_type: SHA
+        auth_passphrase: testauth
+        # possible values: AES, DES
+        privacy_protocol: AES
+        privacy_passphrase: testpriv
+      # for snmp v3. context name to use
+      context: name
+  - id: zabbix trapper
+    # forward to zabbix server/zabbix proxy using zabbix trapper item
+    zabbix_trapper:
+      # default_* is used whenever host lookup fails:
+      # - no advanced config defined
+      # - proxy is defined in zabbix, but not defined in configuration
+      # - can't find monitored hostname
+      # - lookup strategy fails
+      # default_address and default_port can also be used in case the host
+      # is monitored directly with zabbix server and zabbix server
+      # is not configured as HA
+      default_address: 127.0.0.1
+      default_port: 10051
+      default_hostname: TestHost
+      item_key: snmptrap.json
+      # possible values: agent_address, source_address, oid
+      hostname_lookup_strategy: agent_address
+      # define oid/mib name to use when hostname_lookup_strategy is oid
+      oid_lookup: SNMPv2-MIB::sysName
+      # send trap to proxy, or lookup host by its address
+      advanced:
+        db_url: postgres://user:pass@127.0.0.1:5432/dbname
+        db_refresh_interval: 15m
+        db_query_timeout: 5s
+        # define your proxies here, also zabbix server if you use HA configuration for zabbix server
+        proxies:
+          - hostname: zabbix-proxy-01
+            address: 127.0.0.1
+            port: 10051
+          - hostname: zabbix-server-ha-01
+            address: 127.0.0.2
+            port: 10051
+          - hostname: zabbix-server-ha-02
+            address: 127.0.0.3
+            port: 10051
+snmptrapd:
+  listening:
+    - "udp:10162"
+    - "udp6:10162"
+  # magic_begin and magic_end will be used as a separator for each snmptrapd message
+  magic_begin: --TFWDBEGIN--
+  magic_end: --TFWDEND--
+  additional_config: |
+    # WARNING: you have to know what you're doing, as it might break the application
+    # you can add additional config for snmptrapd.conf here, for example, adding tls/dtls connection config
+  auth:
+    # by default auth is disabled, and any v1 and v2 traps will be forwarded
+    enable: false
+    # community name list for v1 and v2
+    community:
+      - name: public
+      - name: test
+    # snmp v3 USM user list
+    user:
+      - username: traptest
+        # if set to true, user will be allowed to use noAuthNoPriv scheme
+        no_auth: false
+        # if set to true, user will only be allowed to use authPriv scheme
+        # no_auth config will be ignored if this is set to true
+        require_privacy: false
+        # set engine id to be allowed for this user
+        engine_id: ""
+        # possible values: MD5, SHA
+        auth_type: SHA
+        # required
+        auth_passphrase: testauth
+        # possible values: AES, DES
+        privacy_protocol: AES
+        # if this field is empty, it will use auth_passphrase field
+        privacy_passphrase: testpriv

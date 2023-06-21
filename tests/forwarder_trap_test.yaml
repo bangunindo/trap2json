@@ -1,0 +1,15 @@
+logger:
+  level: info
+forwarders:
+  - id: send_to_trap_receiver
+    trap:
+      # use this line when testing on desktop environment
+      # host: host.docker.internal:10150
+      host: 172.17.0.1:10150
+      version: v2c
+      community: public
+snmptrapd:
+  auth:
+    enable: true
+    community:
+      - name: public

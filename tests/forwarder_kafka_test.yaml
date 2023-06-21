@@ -1,0 +1,14 @@
+logger:
+  level: info
+forwarders:
+  - id: send_to_kafka
+    kafka:
+      key_field: community
+      hosts:
+        - t2j-kafka:9092
+      topic: t2jtest
+snmptrapd:
+  auth:
+    enable: true
+    community:
+      - name: public

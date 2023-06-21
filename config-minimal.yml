@@ -1,0 +1,9 @@
+logger:
+  level: info
+forwarders:
+  - id: print_to_console
+    file:
+      path: ""
+snmptrapd:
+  auth:
+    enable: false

@@ -1,0 +1,66 @@
+name: Build docker image
+on:
+  push:
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install test dependencies
+        run: sudo apt-get install -y snmp-mibs-downloader tzdata ca-certificates snmp
+      - name: Setup golang
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+      - name: Run e2e testing
+        run: |
+          cd tests
+          go test -c -o trap2json.test github.com/bangunindo/trap2json/tests
+          cd ..
+          go tool test2json -t tests/trap2json.test -test.v -test.paniconexit0
+      - name: Google authentication
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: projects/439911001056/locations/global/workloadIdentityPools/internal-pool/providers/github-actions
+          service_account: trap2json@bangunindo.iam.gserviceaccount.com
+      - name: Retrieving secret
+        id: secrets
+        uses: google-github-actions/get-secretmanager-secrets@v1
+        with:
+          secrets: |-
+            dockerhub-token:bangunindo/dockerhub--token-write
+            dockerhub-user:bangunindo/dockerhub--user
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: bangunindo/trap2json
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Dockerhub login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ steps.secrets.outputs.dockerhub-user }}
+          password: ${{ steps.secrets.outputs.dockerhub-token }}
+      - name: Build & Push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

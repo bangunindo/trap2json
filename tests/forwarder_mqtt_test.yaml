@@ -1,0 +1,14 @@
+logger:
+  level: info
+forwarders:
+  - id: send_to_mqtt
+    mqtt:
+      hosts:
+        - tcp://t2j-mqtt:1883
+      client_id: t2j-client
+      topic: t2jtest
+snmptrapd:
+  auth:
+    enable: true
+    community:
+      - name: public
