@@ -26,7 +26,8 @@ can use this as a solution for your distributed zabbix setup.
 - Supports trap/inform with version 1/2c/3 in a single endpoint
 
 ## Installation
-The supported way of running Trap2JSON is to use docker.
+The supported way of running Trap2JSON is to use docker. Docker image is available
+on [dockerhub](https://hub.docker.com/r/bangunindo/trap2json).
 You can see sample config and its explanations at [config.yml](config.yml)
 ```shell
 docker run -v config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
