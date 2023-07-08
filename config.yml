@@ -9,6 +9,9 @@ prometheus:
   enable: false
   path: /metrics
   port: 9285
+# define number of threads for parsing snmptrapd messages
+# by default it uses the number of logical CPUs on your system
+parse_workers: 2
 forwarders:
     # id is used for logging and prometheus label
   - id: print_to_stdout
