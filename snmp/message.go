@@ -31,6 +31,7 @@ const (
 	TypeBytes
 	TypeBits
 	TypeDateAndTime
+	TypeNull
 )
 
 var varTypeIntStr = map[ValueType]string{
@@ -44,6 +45,7 @@ var varTypeIntStr = map[ValueType]string{
 	TypeBytes:       "bytes",
 	TypeBits:        "bits",
 	TypeDateAndTime: "datetime",
+	TypeNull:        "null",
 }
 var varTypeSnmpInt = map[string]ValueType{
 	"integer":    TypeInteger,
@@ -57,6 +59,7 @@ var varTypeSnmpInt = map[string]ValueType{
 	"hex-string": TypeBytes,
 	"string":     TypeString,
 	"bits":       TypeBits,
+	"null":       TypeNull,
 }
 
 func (v *ValueType) String() string {
@@ -133,6 +136,8 @@ func (v *ValueType) parseDateTime(text string) (any, ValueDetail, error) {
 
 func (v *ValueType) Parse(text string) (any, ValueDetail, error) {
 	switch *v {
+	case TypeNull:
+		return nil, ValueDetail{}, nil
 	case TypeDateAndTime:
 		return v.parseDateTime(text)
 	case TypeDuration:

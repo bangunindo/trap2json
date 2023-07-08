@@ -33,6 +33,7 @@ const (
 
 var sourceAddrPattern = regexp.MustCompile(`\[([0-9.]+)]`)
 var varBindPattern = regexp.MustCompile(`^([0-9.]+) = (.+): (.+)$`)
+var varBindNullPattern = regexp.MustCompile(`^([0-9.]+) = ""$`)
 
 const fieldsPerRecord = 10
 
@@ -90,8 +91,17 @@ func (m *Message) parseValues(text string) {
 		for _, varBind := range varBinds {
 			fields := varBindPattern.FindStringSubmatch(varBind)
 			if len(fields) != 4 {
-				log.Debug().Str("fields", varBind).Msg("value dropped, format unknown")
-				continue
+				if fields = varBindNullPattern.FindStringSubmatch(varBind); len(fields) == 2 {
+					fields = []string{
+						fields[0],
+						fields[1],
+						"NULL",
+						"",
+					}
+				} else {
+					log.Debug().Str("fields", varBind).Msg("value dropped, format unknown")
+					continue
+				}
 			}
 			fields = fields[1:]
 			log.Trace().Strs("fields", fields).Msg("value matches")
@@ -145,6 +155,8 @@ func (m *Message) parseValues(text string) {
 }
 
 func (m *Message) UnmarshalText(text []byte) error {
+	// long snmptrapd messages sometimes have newline character in it
+	text = bytes.Replace(text, []byte("\n"), []byte{}, -1)
 	r := csv.NewReader(bytes.NewReader(text))
 	r.Comma = '|'
 	r.FieldsPerRecord = fieldsPerRecord
