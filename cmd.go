@@ -115,8 +115,10 @@ func Run(c config, r io.Reader, noSnmpTrapD bool) {
 	signal.Notify(sig, syscall.SIGTERM)
 
 	log.Info().Msg("loading MIBs")
-	if err := snmp.InitMIBTranslator(path.Join(defaultConfigPath, "mibs")); err != nil {
+	if loadedModules, err := snmp.InitMIBTranslator(path.Join(defaultConfigPath, "mibs")); err != nil {
 		log.Warn().Err(err).Msg("failed initiating MIB parser, some data might be unavailable")
+	} else {
+		log.Trace().Strs("modules", loadedModules).Msg("MIB modules loaded")
 	}
 
 	topWg := new(sync.WaitGroup)

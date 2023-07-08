@@ -52,13 +52,14 @@ func getMibFiles(path string) (mibPaths, error) {
 	return paths, nil
 }
 
-func InitMIBTranslator(mibPath string) error {
+func InitMIBTranslator(mibPath string) ([]string, error) {
 	var failedModules []string
+	var succeededModules []string
 	gosmi.Init()
 	for _, path := range []string{mibDefaultPath, mibPath} {
 		mibFiles, err := getMibFiles(path)
 		if err != nil {
-			return err
+			return succeededModules, err
 		}
 		for _, path := range mibFiles.dirs {
 			gosmi.AppendPath(path)
@@ -69,11 +70,13 @@ func InitMIBTranslator(mibPath string) error {
 			}
 			if _, err := gosmi.GetModule(module); err != nil {
 				failedModules = append(failedModules, module)
+			} else {
+				succeededModules = append(succeededModules, module)
 			}
 		}
 	}
 	if len(failedModules) > 0 {
-		return errors.Errorf("some modules failed to load: %s", strings.Join(failedModules, ", "))
+		return succeededModules, errors.Errorf("some modules failed to load: %s", strings.Join(failedModules, ", "))
 	}
-	return nil
+	return succeededModules, nil
 }
