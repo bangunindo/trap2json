@@ -44,4 +44,8 @@ docker run -e TZ=Asia/Jakarta -v config.yml:/etc/trap2json/config.yml -p 162:101
 
 ## Zabbix Forwarder
 For zabbix forwarder to work, you need to create an item with Zabbix Trapper type and text/log data type. If you need
-to map the agent address to host's interface, consider using the `advanced` section of `zabbix_trapper` config in [config.yml](config.yml)
+to map the agent address to host's interface, consider using the `advanced` section of `zabbix_trapper` config in [config.yml](config.yml).
+
+Zabbix limits its text/log type to 65536 characters/bytes (depending on backend). In most cases you probably will
+not meet this limitation. But when it does, you might want to create a smaller json schema with only the data
+you want.
