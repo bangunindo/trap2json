@@ -17,10 +17,14 @@ import (
 func TestTrapForwarder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	confPath := "tests/forwarder_trap_test.yaml"
+	if localOS[operatingSystem] {
+		confPath = "tests/forwarder_trap_local_test.yaml"
+	}
 	tfContainer.Container.Mounts = tc.ContainerMounts{
 		tc.ContainerMount{
 			Source: tc.GenericBindMountSource{
-				HostPath: path.Join(wd, "tests/forwarder_trap_test.yaml"),
+				HostPath: path.Join(wd, confPath),
 			},
 			Target:   "/etc/trap2json/config.yml",
 			ReadOnly: true,

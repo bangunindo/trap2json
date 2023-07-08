@@ -3,7 +3,7 @@ logger:
 forwarders:
   - id: send_to_trap_receiver
     trap:
-      host: 172.17.0.1:10150
+      host: host.docker.internal:10150
       version: v2c
       community: public
 snmptrapd:

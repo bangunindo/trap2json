@@ -15,6 +15,11 @@ import (
 const networkName = "t2j-testing"
 const trapPort = "10162/udp"
 
+var operatingSystem = ""
+var localOS = map[string]bool{
+	"OrbStack": true,
+}
+
 var wd, _ = os.Getwd()
 
 type ValueDetail struct {
@@ -222,6 +227,15 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("failed creating network %s", err)
 	}
+	dc, err := tc.NewDockerClient()
+	if err != nil {
+		log.Fatalf("failed connecting docker %s", err)
+	}
+	inf, err := dc.Info(ctx)
+	if err != nil {
+		log.Fatalf("failed getting docker info %s", err)
+	}
+	operatingSystem = inf.OperatingSystem
 
 	for _, c := range containers {
 		ctr, err := tc.GenericContainer(
