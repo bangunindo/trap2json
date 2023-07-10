@@ -197,7 +197,8 @@ func Run(c config, r io.Reader, noSnmpTrapD bool) {
 			metrics.SnmpTrapDDropped.Inc()
 			continue
 		}
-		msg := line[idx+magicBeginLen:]
+		msg := make([]byte, len(line)-magicBeginLen-idx)
+		copy(msg, line[idx+magicBeginLen:])
 		log.Trace().Bytes("data", msg).Msg("sending data")
 		parseChan <- msg
 		metrics.SnmpTrapDSucceeded.Inc()
