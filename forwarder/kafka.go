@@ -38,7 +38,7 @@ func (k *Kafka) Run() {
 		var key []byte
 		if k.config.Kafka.KeyField != "" {
 			if v, ok := mVal[k.config.Kafka.KeyField]; ok && v != nil {
-				if vByte, err := json.Marshal(v); err == nil {
+				if vByte, err := json.Marshal(v); err == nil && string(vByte) != "null" {
 					key = bytes.Trim(vByte, `"`)
 				}
 			}
