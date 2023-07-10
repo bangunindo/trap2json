@@ -1,6 +1,7 @@
 package forwarder
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/segmentio/kafka-go"
@@ -38,7 +39,7 @@ func (k *Kafka) Run() {
 		if k.config.Kafka.KeyField != "" {
 			if v, ok := mVal[k.config.Kafka.KeyField]; ok && v != nil {
 				if vByte, err := json.Marshal(v); err == nil {
-					key = vByte
+					key = bytes.Trim(vByte, `"`)
 				}
 			}
 		}
