@@ -172,6 +172,23 @@ func (b *Base) shouldContinue(m snmp.Message) (map[string]any, bool) {
 		b.logger.Debug().Interface("message", m).Msgf("unexpected error, failed decoding mapstructure")
 		b.ctrDropped.Inc()
 		return nil, false
+	} else {
+		for k, v := range mVal {
+			switch vcast := v.(type) {
+			case *float64:
+				if vcast != nil {
+					mVal[k] = *vcast
+				}
+			case *string:
+				if vcast != nil {
+					mVal[k] = *vcast
+				}
+			case *int:
+				if vcast != nil {
+					mVal[k] = *vcast
+				}
+			}
+		}
 	}
 	err = mapstructure.Decode(m.Values, &mValues)
 	if err != nil {
