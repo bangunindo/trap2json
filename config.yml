@@ -2,47 +2,65 @@ logger:
   # debug will show all kinds of data being discarded
   # trace will show all kinds of data being processed
   # possible values: trace, debug, info, warn, error, fatal
+  # default: info
   level: info
   # possible values: console, json
+  # default: console
   format: console
 prometheus:
+  # default: false
   enable: false
+  # default: /metrics
   path: /metrics
+  # default: 9285
   port: 9285
 # define number of threads for parsing snmptrapd messages
-# by default it uses the number of logical CPUs on your system
+# default: number of logical CPUs
 parse_workers: 2
 forwarders:
     # id is used for logging and prometheus label
   - id: print_to_stdout
     ## these are common configs available for all type of forwarders
-    # the queue size for each forwarder, as forwarders are synchronous, this might be helpful
-    # for slow connections
+    # the queue size for each forwarder, as forwarders are synchronous sent for each message,
+    # this might be helpful for slow connections
+    # you can set this to -1 for unbounded queue size, be careful as this might eat your RAM
+    # default: 10000
     queue_size: 10000
-    # populate agent_address with this oid/mib name prefix
-    # using oid is also possible
-    # agent_address_object_prefix: ".1.3.6.1.6.3.18.1.3"
-    agent_address_object_prefix: "SNMP-COMMUNITY-MIB::snmpTrapAddress"
-    # time format uses golang time layout
+    auto_retry:
+      # default: false
+      enable: true
+      # default: 10
+      max_retries: 10
+      # default: 1s
+      min_delay: 1s
+      # default: 1h
+      max_delay: 1h
+    # define how long should a forwarder wait for its queue to flush during a shutdown event
+    # default: 5s
+    shutdown_wait_time: 0s
+    # time format uses golang time layout. there's also special keywords for unix format:
+    # - unix
+    # - unixMilli
+    # - unixMicro
+    # - unixNano
+    # default: 2006-01-02T15:04:05.999999999Z07:00
     time_format: "2006-01-02T15:04:05.999999999Z07:00"
     # all time fields will use this timezone for formatting
+    # default: local timezone for snmp message, as parsed for oid value
     time_as_timezone: Asia/Jakarta
     # json payload template
+    # see documentation of the syntax https://expr.medv.io/docs/Language-Definition
     # variables is shown as if you don't use any templates
-    # possible variables: time, uptime_seconds, source_address, agent_address, pdu_version, snmp_version,
-    # community, enterprise_oid, enterprise_mib_name, user, context, description, trap_type,
-    # trap_sub_type, values, values_formatted
-    # values_formatted is the configured value_json_format (see below)
+    # possible variables: time, uptime_seconds, src_address, src_port, dst_address, dst_port,
+    # agent_address, pdu_version, snmp_version, community, enterprise_oid, enterprise_mib_name,
+    # user, context, description, trap_type, trap_sub_type, values
     # possible functions:
-    # - valueSelect(value field *see below*, value regex pattern, value variable *should be "values"*)
-    json_format: '{"test": community, "test2": time, "values": values_formatted, "hex_value": valueSelect("oid", "^.1.3.6.1.2.1.63.1.2.1.7$", values).value_detail.hex}'
-    # snmp values/var_binds in json payload template
-    # possible variables: oid, mib_name, type, native_type, value, value_detail.raw, value_detail.hex
-    value_json_format: '{mib_name: value}'
-    # this tells template engine to merge values as one map/dict instead of an array
-    # make sure the keys don't have duplicates or else some data will be lost
-    value_json_is_flat: true
+    # - MergeMap(list of map) // key has to be string
+    # - built-in functions as mentioned in https://expr.medv.io/docs/Language-Definition
+    # default: as mentioned on possible variables
+    json_format: '{"test": community, "test2": time, "values": MergeMap(map(values, { {(.mib_name): .value} }))}'
     # if filter returns false, the message is dropped for this forwarder. this uses the same variables as json_format
+    # default: no default (unfiltered)
     filter: 'community == "public"'
     # the forwarder to use, possible values: file, kafka, mqtt, trap, zabbix_trapper
     # you can only define one in each forwarder
@@ -60,12 +78,16 @@ forwarders:
         - 127.0.0.2:9092
       # define how sent kafka messages ask for acknowledgements
       # possible values: none, one, all
+      # default: none
       required_acks: "none"
       # field name for kafka message's key. it's useful when you have multiple
       # partitions on you kafka topic and want to route the same key to the same
       # partition
+      # it is evaluated as a template, just like json_format
+      # default: no default
       key_field: ""
       # your kafka topic
+      # default: no default
       topic: ""
   - id: mqtt
     # kafka forwarder doesn't support auth yet
@@ -82,6 +104,7 @@ forwarders:
       client_id: ""
       username: ""
       password: ""
+      # default: true
       ordered: true
       # no custom cert supported yet
       tls:
@@ -90,6 +113,7 @@ forwarders:
       topic: ""
       # qos level for mqtt message
       # supported values: 0, 1, 2
+      # default: 0
       qos: 0
   - id: snmp trap
     # forward to another snmp trap receiver/nms
@@ -98,10 +122,12 @@ forwarders:
       # count of workers to spawn which will execute the snmptrap/snmpinform command
       # this is useful if your connection is slow or has high throughput of messages
       # to forward to
+      # default: 1
       workers: 1
       # set enable_inform to true if you wish to use inform.
       # inform will wait for ack message from nms before terminating
       # not all NMS support this
+      # default: false
       enable_inform: false
       host: 127.0.0.1:162
       # define snmp version to use
@@ -159,11 +185,14 @@ forwarders:
             address: 127.0.0.3
             port: 10051
 snmptrapd:
+  # default: "udp:10162", "udp6:10162"
   listening:
     - "udp:10162"
     - "udp6:10162"
   # magic_begin and magic_end will be used as a separator for each snmptrapd message
+  # default: --TFWDBEGIN--
   magic_begin: --TFWDBEGIN--
+  # default: --TFWDEND--
   magic_end: --TFWDEND--
   additional_config: |
     # WARNING: you have to know what you're doing, as it might break the application
@@ -175,6 +204,7 @@ snmptrapd:
     # if this is enabled:
     # - only listed v1/v2c communities will work
     # - v3 will work on specified no_auth/require_privacy config
+    # default: false
     enable: false
     # community name list for v1 and v2
     community:

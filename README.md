@@ -23,6 +23,8 @@ can use this as a solution for your distributed zabbix setup.
 - Prometheus exporter
 - Queued forwarder
   - If the queue is full for a forwarder, the message is dropped
+  - Supports unbounded queue
+- Forwarder auto retry with exponential backoff delay
 - Supports trap/inform with version 1/2c/3 in a single endpoint
 
 ## Installation

@@ -57,6 +57,12 @@ var (
 		},
 		[]string{"index", "type", "id"},
 	)
+	ForwarderRetried = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "trap2json_forwarder_retried",
+		},
+		[]string{"index", "type", "id"},
+	)
 	ForwarderFiltered = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "trap2json_forwarder_filtered",

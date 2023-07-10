@@ -48,20 +48,22 @@ func (m *MQTT) Run() {
 	}
 	m.buildTLSConfig(opts)
 	client := mqtt.NewClient(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		m.logger.Warn().Err(token.Error()).Msg("failed connecting to mqtt broker")
-		return
-	}
+	token := client.Connect()
+	token.Wait()
 	defer client.Disconnect(10_000)
-	for msg := range m.channel {
-		mJson, _, skip := m.processMessage(msg)
-		if skip {
+	for {
+		msg, err := m.Get()
+		if err != nil {
+			break
+		}
+		msg.Compile(m.CompilerConf)
+		if msg.Skip {
+			m.ctrFiltered.Inc()
 			continue
 		}
-		if t := client.Publish(m.config.MQTT.Topic, m.config.MQTT.Qos, false, mJson); t.Wait() &&
+		if t := client.Publish(m.config.MQTT.Topic, m.config.MQTT.Qos, false, msg.MessageJSON); t.Wait() &&
 			t.Error() != nil {
-			m.logger.Warn().Err(t.Error()).Msg("failed sending message to mqtt broker")
-			m.ctrDropped.Inc()
+			m.Retry(msg, t.Error())
 		} else {
 			m.ctrSucceeded.Inc()
 		}

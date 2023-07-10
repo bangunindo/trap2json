@@ -1,0 +1,5 @@
+forwarders:
+  - id: Test filter
+    filter: community == "public"
+    mock:
+      timeout: 0s

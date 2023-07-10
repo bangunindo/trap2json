@@ -10,6 +10,8 @@ import (
 
 const mibDefaultPath = "/usr/share/snmp/mibs"
 
+var mibInit = false
+
 type mibPaths struct {
 	dirs    []string
 	modules []string
@@ -53,6 +55,9 @@ func getMibFiles(path string) (mibPaths, error) {
 }
 
 func InitMIBTranslator(mibPath string) ([]string, error) {
+	if mibInit {
+		return nil, nil
+	}
 	var failedModules []string
 	var succeededModules []string
 	gosmi.Init()
@@ -75,6 +80,7 @@ func InitMIBTranslator(mibPath string) ([]string, error) {
 			}
 		}
 	}
+	mibInit = true
 	if len(failedModules) > 0 {
 		return succeededModules, errors.Errorf("some modules failed to load: %s", strings.Join(failedModules, ", "))
 	}

@@ -1,31 +1,12 @@
 package forwarder
 
 import (
-	"encoding/json"
 	"fmt"
 	zsend "github.com/essentialkaos/go-zabbix"
 	"github.com/pkg/errors"
 	"net/url"
 	"strings"
-	"time"
 )
-
-type Duration struct {
-	time.Duration
-}
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.String())
-}
-
-func (d *Duration) UnmarshalText(b []byte) error {
-	if d == nil {
-		return errors.New("can't unmarshal a nil *Duration")
-	}
-	var err error
-	d.Duration, err = time.ParseDuration(string(b))
-	return err
-}
 
 // ProxyConf is the list of available proxies in a zabbix system.
 // In case of HA zabbix server, you need to include it here with its
@@ -155,9 +136,14 @@ func (z *ZabbixTrapper) Run() {
 	defer z.cancel()
 	defer z.logger.Info().Msg("forwarder exited")
 	z.logger.Info().Msg("starting forwarder")
-	for m := range z.channel {
-		mJson, _, skip := z.processMessage(m)
-		if skip {
+	for {
+		m, err := z.Get()
+		if err != nil {
+			break
+		}
+		m.Compile(z.CompilerConf)
+		if m.Skip {
+			z.ctrFiltered.Inc()
 			continue
 		}
 		address := fmt.Sprintf(
@@ -180,15 +166,12 @@ func (z *ZabbixTrapper) Run() {
 			z.ctrDropped.Inc()
 			continue
 		}
-		item := c.Add(z.config.ZabbixTrapper.ItemKey, string(mJson))
-		if m.LocalTime != nil {
-			item.Clock = m.LocalTime.Time().Unix()
-			item.NS = m.LocalTime.Time().Nanosecond()
-		}
+		item := c.Add(z.config.ZabbixTrapper.ItemKey, string(m.MessageJSON))
+		item.Clock = m.Time.Unix()
+		item.NS = m.Time.Nanosecond()
 		z.logger.Trace().Str("address", address).Str("hostname", hostname).Msg("sending to zabbix")
 		if _, err = c.Send(); err != nil {
-			z.logger.Debug().Err(err).Msg("failed sending messages to zabbix")
-			z.ctrDropped.Inc()
+			z.Retry(m, err)
 		} else {
 			z.ctrSucceeded.Inc()
 		}

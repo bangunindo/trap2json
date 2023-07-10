@@ -5,8 +5,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/Workiva/go-datastructures/queue"
+	"github.com/antonmedv/expr"
+	"github.com/antonmedv/expr/vm"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/guregu/null.v4"
+	"math"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,8 +23,8 @@ import (
 
 type ValueType int8
 type ValueDetail struct {
-	Raw any     `json:"raw,omitempty" mapstructure:"raw"`
-	Hex *string `json:"hex,omitempty" mapstructure:"hex"`
+	Raw any    `json:"raw,omitempty" expr:"raw"`
+	Hex string `json:"hex,omitempty" expr:"hex"`
 }
 
 const (
@@ -116,19 +123,19 @@ func (v *ValueType) parseDateTime(text string) (any, ValueDetail, error) {
 	if len(dateTimeZoneParts) < 2 {
 		return text, ValueDetail{}, errors.New("not a valid DateAndTime")
 	}
-	timeZoneNormalized := "+00:00"
+	timeOffsetNormalized := "+00:00"
 	if len(dateTimeZoneParts) == 3 {
 		tz := dateTimeZoneParts[2]
 		if (strings.HasPrefix(tz, "+") || strings.HasPrefix(tz, "-")) && strings.Count(tz, ":") == 1 {
 			tzTrim := strings.TrimLeft(tz, "-+")
 			tzSplit := strings.Split(tzTrim, ":")
-			timeZoneNormalized = tz[:1] + fmt.Sprintf("%02s", tzSplit[0]) + ":" + fmt.Sprintf("%02s", tzSplit[1])
+			timeOffsetNormalized = tz[:1] + fmt.Sprintf("%02s", tzSplit[0]) + ":" + fmt.Sprintf("%02s", tzSplit[1])
 		}
 	}
-	dateTimeParts := strings.Join(append(dateTimeZoneParts[:2], timeZoneNormalized), ",")
+	dateTimeParts := strings.Join(append(dateTimeZoneParts[:2], timeOffsetNormalized), ",")
 	dateTime, err := time.Parse("2006-1-2,15:4:5.9,-07:00", dateTimeParts)
 	if err == nil {
-		return TimeJson{t: dateTime}, ValueDetail{Raw: text}, nil
+		return TimeLayout{Time: dateTime}, ValueDetail{Raw: text}, nil
 	} else {
 		return text, ValueDetail{}, errors.New("failed parsing DateAndTime")
 	}
@@ -166,9 +173,9 @@ func (v *ValueType) Parse(text string) (any, ValueDetail, error) {
 			return text, ValueDetail{}, errors.Wrapf(err, "failed casting hex: %s", text)
 		} else if utf8.Valid(s) {
 			*v = TypeString
-			return string(s), ValueDetail{Hex: &text}, nil
+			return string(s), ValueDetail{Hex: text}, nil
 		} else {
-			return base64.StdEncoding.EncodeToString(s), ValueDetail{Hex: &text}, nil
+			return base64.StdEncoding.EncodeToString(s), ValueDetail{Hex: text}, nil
 		}
 	case TypeString:
 		// string DISPLAY-HINT is already handled in snmptrapd
@@ -179,27 +186,55 @@ func (v *ValueType) Parse(text string) (any, ValueDetail, error) {
 		hexVal := strings.Join(textSplit[:len(textSplit)-1], "")
 		valRaw := textSplit[len(textSplit)-1]
 		val, valDetail, err := v.parseEnum(valRaw)
-		valDetail.Hex = &hexVal
+		valDetail.Hex = hexVal
 		return val, valDetail, err
 	default:
 		return text, ValueDetail{}, errors.Errorf("unknown type: %s", v.String())
 	}
 }
 
+type ValueCompiled struct {
+	OID         string      `expr:"oid"`
+	MIBName     string      `expr:"mib_name"`
+	Type        string      `expr:"type"`
+	NativeType  string      `expr:"native_type"`
+	Value       any         `expr:"value"`
+	ValueDetail ValueDetail `expr:"value_detail"`
+}
+
 type Value struct {
-	OID         string      `json:"oid" mapstructure:"oid"`
-	MIBName     string      `json:"mib_name" mapstructure:"mib_name"`
-	Type        ValueType   `json:"type" mapstructure:"type"`
-	NativeType  string      `json:"native_type" mapstructure:"native_type"`
-	Value       any         `json:"value" mapstructure:"value"`
-	ValueDetail ValueDetail `json:"value_detail" mapstructure:"value_detail"`
+	OID         string      `json:"oid"`
+	MIBName     null.String `json:"mib_name"`
+	Type        ValueType   `json:"type"`
+	NativeType  string      `json:"native_type"`
+	Value       any         `json:"value"`
+	ValueDetail ValueDetail `json:"value_detail"`
+}
+
+func (v Value) Compile(conf MessageCompiler) ValueCompiled {
+	var newV any
+	if t, ok := v.Value.(TimeLayout); ok {
+		t.SetTimezone(conf.TimeAsTimezone)
+		t.SetLayout(conf.TimeFormat)
+		newV = t.MarshalNative()
+	} else {
+		newV = v.Value
+	}
+	return ValueCompiled{
+		OID:         v.OID,
+		MIBName:     v.MIBName.String,
+		Type:        v.Type.String(),
+		NativeType:  v.NativeType,
+		Value:       newV,
+		ValueDetail: v.ValueDetail,
+	}
 }
 
 func (v Value) HasOIDPrefix(prefix string) bool {
 	return v.OID == prefix ||
-		v.MIBName == prefix ||
+		v.MIBName.String == prefix ||
 		strings.HasPrefix(v.OID, prefix+".") ||
-		strings.HasPrefix(v.MIBName, prefix+".")
+		strings.HasPrefix(v.MIBName.String, prefix+".")
 }
 
 func (v Value) SnmpCmd() (cmd []string) {
@@ -248,71 +283,239 @@ func (v Value) SnmpCmd() (cmd []string) {
 
 const defaultTimeLayout = time.RFC3339Nano
 
-type TimeJson struct {
-	t      time.Time
+type TimeLayout struct {
+	time.Time
 	layout string
 	tz     string
 }
 
-func (t *TimeJson) SetLayout(layout string) {
+func (t *TimeLayout) SetLayout(layout string) {
 	t.layout = layout
 }
 
-func (t *TimeJson) SetTimezone(tz string) {
+func (t *TimeLayout) SetTimezone(tz string) {
 	t.tz = tz
 }
 
-func (t *TimeJson) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.String())
+func (t *TimeLayout) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.MarshalNative())
 }
 
-func (t *TimeJson) String() string {
-	var timeStr string
+func (t *TimeLayout) MarshalNative() any {
 	switch t.layout {
 	case "unix":
-		timeStr = strconv.FormatInt(t.t.Unix(), 10)
+		return t.Time.Unix()
 	case "unixMilli":
-		timeStr = strconv.FormatInt(t.t.UnixMilli(), 10)
+		return t.Time.UnixMilli()
 	case "unixMicro":
-		timeStr = strconv.FormatInt(t.t.UnixMicro(), 10)
+		return t.Time.UnixMicro()
 	case "unixNano":
-		timeStr = strconv.FormatInt(t.t.UnixNano(), 10)
-	default:
-		if t.layout == "" {
-			t.layout = defaultTimeLayout
-		}
-		timeStr = t.t.Format(t.layout)
-		if loc, err := time.LoadLocation(t.tz); err == nil && t.tz != "" {
-			timeStr = t.t.In(loc).Format(t.layout)
-		}
+		return t.Time.UnixNano()
+	}
+	if t.layout == "" {
+		t.layout = defaultTimeLayout
+	}
+	timeStr := t.Time.Format(t.layout)
+	if loc, err := time.LoadLocation(t.tz); err == nil && t.tz != "" {
+		timeStr = t.Time.In(loc).Format(t.layout)
 	}
 	return timeStr
 }
 
-func (t *TimeJson) Time() time.Time {
-	return t.t
-}
-
-func NewTimeJson(t time.Time) TimeJson {
-	return TimeJson{
-		t: t,
+func (t *TimeLayout) String() string {
+	switch v := t.MarshalNative().(type) {
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case string:
+		return v
+	default:
+		return fmt.Sprint(v)
 	}
 }
 
+type MessageCompiler struct {
+	TimeFormat     string
+	TimeAsTimezone string
+	Filter         *vm.Program
+	JSONFormat     *vm.Program
+	Logger         zerolog.Logger
+}
+
+type MessageCompiled struct {
+	Time              any             `expr:"time"`
+	UptimeSeconds     *float64        `expr:"uptime_seconds"`
+	SrcAddress        string          `expr:"src_address"`
+	SrcPort           int             `expr:"src_port"`
+	DstAddress        string          `expr:"dst_address"`
+	DstPort           int             `expr:"dst_port"`
+	AgentAddress      *string         `expr:"agent_address"`
+	PDUVersion        string          `expr:"pdu_version"`
+	SNMPVersion       string          `expr:"snmp_version"`
+	Community         *string         `expr:"community"`
+	EnterpriseOID     *string         `expr:"enterprise_oid"`
+	EnterpriseMIBName *string         `expr:"enterprise_mib_name"`
+	User              *string         `expr:"user"`
+	Context           *string         `expr:"context"`
+	Description       *string         `expr:"description"`
+	TrapType          *int64          `expr:"trap_type"`
+	TrapSubType       *int64          `expr:"trap_sub_type"`
+	Values            []ValueCompiled `expr:"values"`
+}
+
+var Functions = []expr.Option{
+	expr.Function(
+		"MergeMap",
+		func(params ...any) (any, error) {
+			switch vList := params[0].(type) {
+			case []map[string]any:
+				res := make(map[string]any)
+				for _, m := range vList {
+					for k, v := range m {
+						res[k] = v
+					}
+				}
+				return res, nil
+			case []any:
+				res := make(map[string]any)
+				for _, m := range vList {
+					if mCast, ok := m.(map[string]any); !ok {
+						return nil, errors.Errorf("incorrect type passed %s", reflect.TypeOf(m))
+					} else {
+						for k, v := range mCast {
+							res[k] = v
+						}
+					}
+				}
+				return res, nil
+			default:
+				return nil, errors.Errorf("incorrect type passed %s", reflect.TypeOf(params[0]))
+			}
+		},
+		new(func([]map[string]any) map[string]any),
+	),
+}
+
 type Message struct {
-	LocalTime         *TimeJson `json:"time" mapstructure:"time"`
-	UptimeSeconds     *float64  `json:"uptime_seconds" mapstructure:"uptime_seconds"`
-	SourceAddress     *string   `json:"source_address" mapstructure:"source_address"`
-	AgentAddress      *string   `json:"agent_address" mapstructure:"agent_address"`
-	PDUVersion        *string   `json:"pdu_version" mapstructure:"pdu_version"`
-	SNMPVersion       *string   `json:"snmp_version" mapstructure:"snmp_version"`
-	Community         *string   `json:"community" mapstructure:"community"`
-	EnterpriseOID     *string   `json:"enterprise_oid" mapstructure:"enterprise_oid"`
-	EnterpriseMIBName *string   `json:"enterprise_mib_name" mapstructure:"enterprise_mib_name"`
-	User              *string   `json:"user" mapstructure:"user"`
-	Context           *string   `json:"context" mapstructure:"context"`
-	Description       *string   `json:"description" mapstructure:"description"`
-	TrapType          *int      `json:"trap_type" mapstructure:"trap_type"`
-	TrapSubType       *int      `json:"trap_sub_type" mapstructure:"trap_sub_type"`
-	Values            []Value   `json:"values" mapstructure:"values"`
+	Time              TimeLayout  `json:"time"`
+	UptimeSeconds     null.Float  `json:"uptime_seconds"`
+	SrcAddress        string      `json:"src_address"`
+	SrcPort           int         `json:"src_port"`
+	DstAddress        string      `json:"dst_address"`
+	DstPort           int         `json:"dst_port"`
+	AgentAddress      null.String `json:"agent_address"`
+	PDUVersion        string      `json:"pdu_version"`
+	SNMPVersion       string      `json:"snmp_version"`
+	Community         null.String `json:"community"`
+	EnterpriseOID     null.String `json:"enterprise_oid"`
+	EnterpriseMIBName null.String `json:"enterprise_mib_name"`
+	User              null.String `json:"user"`
+	Context           null.String `json:"context"`
+	Description       null.String `json:"description"`
+	TrapType          null.Int    `json:"trap_type"`
+	TrapSubType       null.Int    `json:"trap_sub_type"`
+	Values            []Value     `json:"values"`
+
+	Retries         int             `json:"-"`
+	Eta             time.Time       `json:"-"`
+	Skip            bool            `json:"-"`
+	MessageCompiled MessageCompiled `json:"-"`
+	MessageJSON     []byte          `json:"-"`
+	compiled        bool
+}
+
+func (m *Message) Copy() Message {
+	mValues := make([]Value, len(m.Values))
+	copy(mValues, m.Values)
+	mCopy := *m
+	mCopy.Values = mValues
+	return mCopy
+}
+
+func (m *Message) Compile(conf MessageCompiler) {
+	// message can already be compiled in case of retry
+	if m.compiled {
+		return
+	}
+	defer func() {
+		m.compiled = true
+	}()
+	m.Time.SetTimezone(conf.TimeAsTimezone)
+	m.Time.SetLayout(conf.TimeFormat)
+	var vc []ValueCompiled
+	for _, v := range m.Values {
+		vc = append(vc, v.Compile(conf))
+	}
+	m.MessageCompiled = MessageCompiled{
+		Time:              m.Time.MarshalNative(),
+		UptimeSeconds:     m.UptimeSeconds.Ptr(),
+		SrcAddress:        m.SrcAddress,
+		SrcPort:           m.SrcPort,
+		DstAddress:        m.DstAddress,
+		DstPort:           m.DstPort,
+		AgentAddress:      m.AgentAddress.Ptr(),
+		PDUVersion:        m.PDUVersion,
+		SNMPVersion:       m.SNMPVersion,
+		Community:         m.Community.Ptr(),
+		EnterpriseOID:     m.EnterpriseOID.Ptr(),
+		EnterpriseMIBName: m.EnterpriseMIBName.Ptr(),
+		User:              m.User.Ptr(),
+		Context:           m.Context.Ptr(),
+		Description:       m.Description.Ptr(),
+		TrapType:          m.TrapType.Ptr(),
+		TrapSubType:       m.TrapSubType.Ptr(),
+		Values:            vc,
+	}
+	if conf.Filter != nil {
+		if continu, err := expr.Run(conf.Filter, m.MessageCompiled); err == nil {
+			if continueBool, ok := continu.(bool); ok {
+				m.Skip = !continueBool
+			} else {
+				conf.Logger.Debug().Err(err).Msg("failed evaluating filter expression")
+			}
+		}
+	}
+	if m.Skip {
+		return
+	}
+	var payload []byte
+	var err error
+	if conf.JSONFormat != nil {
+		var res any
+		if res, err = expr.Run(conf.JSONFormat, m.MessageCompiled); err == nil {
+			payload, err = json.Marshal(res)
+			if err != nil {
+				conf.Logger.Warn().Err(err).Msg("unexpected error, failed marshalling json")
+			}
+		} else {
+			conf.Logger.Debug().Err(err).Msg("failed evaluating json_format expression")
+		}
+	}
+	if payload == nil {
+		payload, err = json.Marshal(m)
+		if err != nil {
+			conf.Logger.Warn().Err(err).Msg("unexpected error, failed marshalling json")
+		}
+	}
+	m.MessageJSON = payload
+	return
+}
+
+func (m *Message) ComputeEta(minDelay, maxDelay time.Duration) time.Time {
+	retryPow := int(math.Pow(2, float64(m.Retries)))
+	delay := minDelay * time.Duration(retryPow)
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+	return time.Now().Add(delay)
+}
+
+func (m *Message) Compare(other queue.Item) int {
+	otherM := other.(*Message)
+	if otherM.Eta.Equal(m.Eta) {
+		return 0
+	} else if otherM.Eta.After(m.Eta) {
+		return -1
+	} else {
+		return 1
+	}
 }

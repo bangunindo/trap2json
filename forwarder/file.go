@@ -28,21 +28,25 @@ func (f *File) Run() {
 	}
 	if err != nil {
 		f.logger.
-			Error().
+			Fatal().
 			Err(err).
 			Msg("failed opening file")
 		return
 	}
 	defer fOut.Close()
-	for m := range f.channel {
-		mJson, _, skip := f.processMessage(m)
-		if skip {
+	for {
+		m, err := f.Get()
+		if err != nil {
+			break
+		}
+		m.Compile(f.CompilerConf)
+		if m.Skip {
+			f.ctrFiltered.Inc()
 			continue
 		}
-		mJson = append(mJson, []byte("\n")...)
+		mJson := append(m.MessageJSON, []byte("\n")...)
 		if _, err = fOut.Write(mJson); err != nil {
-			f.logger.Warn().Err(err).Msg("failed writing message to file")
-			f.ctrDropped.Inc()
+			f.Retry(m, err)
 		} else {
 			f.ctrSucceeded.Inc()
 		}

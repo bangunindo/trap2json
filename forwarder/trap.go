@@ -19,9 +19,14 @@ type SNMPTrapConfig struct {
 	// TODO support templating for these configs
 }
 
+type Cmd struct {
+	Commands []string
+	Message  *snmp.Message
+}
+
 type SNMPTrap struct {
 	Base
-	workerChan chan []string
+	workerChan chan Cmd
 	workerWg   *sync.WaitGroup
 }
 
@@ -80,35 +85,35 @@ func (s *SNMPTrap) baseBuilder() (cmd []string) {
 			cmd = append(cmd, "-e", s.config.Trap.User.EngineID)
 		}
 	default:
-		s.logger.Warn().Msg("assertion error, unexpected snmp version")
+		s.logger.Warn().Msg("unexpected error, unexpected snmp version")
 	}
 	cmd = append(cmd, s.config.Trap.Host)
 	return
 }
 
-func (s *SNMPTrap) commandBuilder(baseCmd []string, m snmp.Message) (cmd []string) {
+func (s *SNMPTrap) commandBuilder(baseCmd []string, m *snmp.Message) (cmd []string) {
 	cmd = baseCmd[:]
 	values := m.Values[:]
 	var uptime int
-	if m.UptimeSeconds != nil {
-		uptime = int(*m.UptimeSeconds * 100)
+	if m.UptimeSeconds.Valid {
+		uptime = int(m.UptimeSeconds.Float64 * 100)
 	}
 	trapOid := ".1.3.6.1.6.3.1.1.4.1"
-	if m.EnterpriseOID != nil {
-		trapOid = *m.EnterpriseOID
+	if m.EnterpriseOID.Valid {
+		trapOid = m.EnterpriseOID.String
 	}
 	switch s.config.Trap.Version {
 	case "v1":
 		var trapType, trapSubType int
-		if m.TrapType != nil {
-			trapType = *m.TrapType
+		if m.TrapType.Valid {
+			trapType = int(m.TrapType.Int64)
 		}
-		if m.TrapSubType != nil {
-			trapSubType = *m.TrapSubType
+		if m.TrapSubType.Valid {
+			trapSubType = int(m.TrapSubType.Int64)
 		}
 		agentAddr := "0.0.0.0"
-		if m.AgentAddress != nil {
-			agentAddr = *m.AgentAddress
+		if m.AgentAddress.Valid {
+			agentAddr = m.AgentAddress.String
 		}
 		cmd = append(
 			cmd,
@@ -132,7 +137,7 @@ func (s *SNMPTrap) commandBuilder(baseCmd []string, m snmp.Message) (cmd []strin
 			}
 		}
 	default:
-		s.logger.Warn().Msg("assertion error, unexpected snmp version")
+		s.logger.Warn().Msg("unexpected error, unexpected snmp version")
 		return
 	}
 	for _, val := range values {
@@ -144,10 +149,9 @@ func (s *SNMPTrap) commandBuilder(baseCmd []string, m snmp.Message) (cmd []strin
 func (s *SNMPTrap) runWorker() {
 	defer s.workerWg.Done()
 	for cmd := range s.workerChan {
-		cmdOut := exec.Command(cmd[0], cmd[1:]...)
+		cmdOut := exec.Command(cmd.Commands[0], cmd.Commands[1:]...)
 		if err := cmdOut.Run(); err != nil {
-			s.logger.Warn().Err(err).Msg("failed sending trap")
-			s.ctrDropped.Inc()
+			s.Retry(cmd.Message, err)
 		} else {
 			s.ctrSucceeded.Inc()
 		}
@@ -159,7 +163,7 @@ func (s *SNMPTrap) Run() {
 	defer s.logger.Info().Msg("forwarder exited")
 	s.logger.Info().Msg("starting forwarder")
 	if err := s.configCheck(); err != nil {
-		s.logger.Error().Err(err).Msg("failed starting trap forwarder")
+		s.logger.Fatal().Err(err).Msg("failed starting trap forwarder")
 		return
 	}
 	for i := 0; i < s.config.Trap.Workers; i++ {
@@ -167,13 +171,21 @@ func (s *SNMPTrap) Run() {
 		go s.runWorker()
 	}
 	baseCmd := s.baseBuilder()
-	for m := range s.channel {
-		_, _, skip := s.processMessage(m)
-		if skip {
+	for {
+		m, err := s.Get()
+		if err != nil {
+			break
+		}
+		m.Compile(s.CompilerConf)
+		if m.Skip {
+			s.ctrFiltered.Inc()
 			continue
 		}
 		cmd := s.commandBuilder(baseCmd, m)
-		s.workerChan <- cmd
+		s.workerChan <- Cmd{
+			Commands: cmd,
+			Message:  m,
+		}
 	}
 	close(s.workerChan)
 	s.workerWg.Wait()
@@ -182,7 +194,7 @@ func (s *SNMPTrap) Run() {
 func NewSNMPTrap(c Config, idx int) Forwarder {
 	fwd := &SNMPTrap{
 		NewBase(c, idx),
-		make(chan []string),
+		make(chan Cmd),
 		new(sync.WaitGroup),
 	}
 	go fwd.Run()

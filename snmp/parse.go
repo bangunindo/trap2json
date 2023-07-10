@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/sleepinggenius2/gosmi"
 	"github.com/sleepinggenius2/gosmi/types"
+	"gopkg.in/guregu/null.v4"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +22,7 @@ type Header int8
 const (
 	HeaderAgentAddress Header = iota
 	HeaderConnection
-	HeaderLocalTime
+	HeaderTime
 	HeaderUptime
 	HeaderDescription
 	HeaderEnterprise
@@ -31,7 +32,7 @@ const (
 	HeaderVarBinds
 )
 
-var sourceAddrPattern = regexp.MustCompile(`\[([0-9.]+)]`)
+var connectionPattern = regexp.MustCompile(`\w+: \[([\w.-]+)]:([0-9]+)->\[([\w.-]+)]:([0-9]+)`)
 var varBindPattern = regexp.MustCompile(`^([0-9.]+) = (.+): (.+)$`)
 var varBindNullPattern = regexp.MustCompile(`^([0-9.]+) = ""$`)
 
@@ -43,7 +44,7 @@ func (m *Message) parseSecurityInfo(text string) {
 	secParse.TrimLeadingSpace = true
 	secParse.LazyQuotes = true
 	if secInfo, err := secParse.Read(); err == nil && len(secInfo) > 2 {
-		m.PDUVersion = &secInfo[0]
+		m.PDUVersion = secInfo[0]
 		for _, sec := range secInfo[1:] {
 			secSplit := strings.Split(sec, " ")
 			if len(secSplit) < 2 || len(secSplit[0]) < 4 {
@@ -51,31 +52,31 @@ func (m *Message) parseSecurityInfo(text string) {
 			}
 			switch secSplit[0][:4] {
 			case "SNMP":
-				m.SNMPVersion = &secSplit[1]
+				m.SNMPVersion = secSplit[1]
 			case "user":
-				m.User = &secSplit[1]
+				m.User = null.NewString(secSplit[1], true)
 			case "cont":
-				m.Context = &secSplit[1]
+				m.Context = null.NewString(secSplit[1], true)
 			case "comm":
-				m.Community = &secSplit[1]
+				m.Community = null.NewString(secSplit[1], true)
 			}
 		}
 	}
 }
 
-func translateOID(oid string) (string, *gosmi.SmiNode, error) {
+func translateOID(oid string) (null.String, *gosmi.SmiNode, error) {
 	oid = strings.TrimLeft(oid, ".")
 	oidParsed, err := types.OidFromString(oid)
 	if err != nil {
-		return "", nil, err
+		return null.String{}, nil, err
 	}
 	node, err := gosmi.GetNodeByOID(oidParsed)
 	if err != nil {
-		return "", nil, err
+		return null.String{}, nil, err
 	}
 	oidName := node.RenderQualified()
 	oidName = oidName + strings.Replace(oid, node.Oid.String(), "", 1)
-	return oidName, &node, nil
+	return null.NewString(oidName, oidName != ""), &node, nil
 }
 
 const uptimeOID = ".1.3.6.1.2.1.1.3.0"
@@ -131,25 +132,25 @@ func (m *Message) parseValues(text string) {
 			value.ValueDetail = valueDetail
 			if oidText == uptimeOID {
 				if v, ok := valueDetail.Raw.(float64); ok {
-					m.UptimeSeconds = &v
+					m.UptimeSeconds = null.NewFloat(v, true)
 				}
 			}
 			if oidText == agentOID || strings.HasPrefix(oidText, agentOID+".") {
 				if v, ok := valueRaw.(string); ok {
-					m.AgentAddress = &v
+					m.AgentAddress = null.NewString(v, true)
 				}
 			}
 			if oidText == enterpriseOID {
 				if v, ok := valueDetail.Raw.(string); ok {
-					m.EnterpriseOID = &v
+					m.EnterpriseOID = null.NewString(v, true)
 				}
 			}
 			m.Values = append(m.Values, value)
 		}
 	}
-	if m.EnterpriseOID != nil {
-		if name, _, err := translateOID(*m.EnterpriseOID); err == nil {
-			m.EnterpriseMIBName = &name
+	if m.EnterpriseOID.Valid {
+		if name, _, err := translateOID(m.EnterpriseOID.String); err == nil {
+			m.EnterpriseMIBName = name
 		}
 	}
 }
@@ -166,32 +167,39 @@ func (m *Message) UnmarshalText(text []byte) error {
 		return errors.Wrap(err, "failed parsing message")
 	}
 	if agentAddr := row[HeaderAgentAddress]; agentAddr != "0.0.0.0" && agentAddr != "" {
-		m.AgentAddress = &agentAddr
+		m.AgentAddress = null.NewString(agentAddr, true)
 	}
-	if sourceAddr := sourceAddrPattern.FindStringSubmatch(row[HeaderConnection]); len(sourceAddr) > 1 {
-		m.SourceAddress = &sourceAddr[1]
+	if connection := connectionPattern.FindStringSubmatch(row[HeaderConnection]); len(connection) > 4 {
+		m.SrcAddress = connection[1]
+		if i, err := strconv.Atoi(connection[2]); err == nil {
+			m.SrcPort = i
+		}
+		m.DstAddress = connection[3]
+		if i, err := strconv.Atoi(connection[4]); err == nil {
+			m.DstPort = i
+		}
 	}
 	// we're using system generated time here instead of parsing from snmptrapd
 	// because if trap message arrived at the same second mark, zabbix will reject
 	// the message and get marked as duplicate
-	m.LocalTime = &TimeJson{
-		t: time.Now(),
+	m.Time = TimeLayout{
+		Time: time.Now(),
 	}
 	if sysUptime, err := strconv.Atoi(row[HeaderUptime]); err == nil && sysUptime > 0 {
 		uptime := float64(sysUptime) / 100
-		m.UptimeSeconds = &uptime
+		m.UptimeSeconds = null.NewFloat(uptime, true)
 	}
 	if description := row[HeaderDescription]; description != "" {
-		m.Description = &description
+		m.Description = null.NewString(description, true)
 	}
 	if enterprise := row[HeaderEnterprise]; enterprise != "" && enterprise != "." {
-		m.EnterpriseOID = &enterprise
+		m.EnterpriseOID = null.NewString(enterprise, true)
 	}
 	if trapType, err := strconv.Atoi(row[HeaderTrapType]); err == nil {
-		m.TrapType = &trapType
+		m.TrapType = null.NewInt(int64(trapType), true)
 	}
 	if trapSubType, err := strconv.Atoi(row[HeaderTrapSubType]); err == nil {
-		m.TrapSubType = &trapSubType
+		m.TrapSubType = null.NewInt(int64(trapSubType), true)
 	}
 	// security info is using the following format:
 	// INFORM, SNMP v3, user traptest, context test

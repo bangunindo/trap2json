@@ -107,8 +107,8 @@ func SplitAt(substring string) func(data []byte, atEOF bool) (advance int, token
 	}
 }
 
-func Run(c config, r io.Reader, noSnmpTrapD bool) {
-	ctx, cancel := context.WithCancel(context.Background())
+func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -135,7 +135,7 @@ func Run(c config, r io.Reader, noSnmpTrapD bool) {
 			defer topWg.Done()
 			log.Info().Msgf("starting prometheus exporter at %s", addr)
 			if err := promServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Error().Err(err).Msg("prometheus exporter failed to start")
+				log.Fatal().Err(err).Msg("prometheus exporter failed to start")
 			}
 		}()
 		// and terminate when terminate signal received

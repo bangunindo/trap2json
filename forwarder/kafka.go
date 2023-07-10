@@ -1,9 +1,11 @@
 package forwarder
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/antonmedv/expr"
+	"github.com/antonmedv/expr/vm"
+	"github.com/bangunindo/trap2json/snmp"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -16,6 +18,8 @@ type KafkaConfig struct {
 
 type Kafka struct {
 	Base
+
+	keyFieldTemplate *vm.Program
 }
 
 func (k *Kafka) Run() {
@@ -30,16 +34,28 @@ func (k *Kafka) Run() {
 		BatchSize:    1,
 	}
 	defer producer.Close()
-	for m := range k.channel {
-		mJson, mVal, skip := k.processMessage(m)
-		if skip {
+
+	for {
+		m, err := k.Get()
+		if err != nil {
+			break
+		}
+		m.Compile(k.CompilerConf)
+		if m.Skip {
+			k.ctrFiltered.Inc()
 			continue
 		}
 		var key []byte
-		if k.config.Kafka.KeyField != "" {
-			if v, ok := mVal[k.config.Kafka.KeyField]; ok && v != nil {
-				if vByte, err := json.Marshal(v); err == nil && string(vByte) != "null" {
-					key = bytes.Trim(vByte, `"`)
+		if k.keyFieldTemplate != nil {
+			if res, err := expr.Run(k.keyFieldTemplate, m.MessageCompiled); err == nil {
+				switch v := res.(type) {
+				case string:
+					key = []byte(v)
+				default:
+					key, err = json.Marshal(v)
+					if string(key) == "null" {
+						key = nil
+					}
 				}
 			}
 		}
@@ -47,11 +63,10 @@ func (k *Kafka) Run() {
 			context.Background(),
 			kafka.Message{
 				Key:   key,
-				Value: mJson,
+				Value: m.MessageJSON,
 			},
 		); err != nil {
-			k.logger.Warn().Err(err).Msg("failed sending messages to kafka")
-			k.ctrDropped.Inc()
+			k.Retry(m, err)
 		} else {
 			k.ctrSucceeded.Inc()
 		}
@@ -60,7 +75,17 @@ func (k *Kafka) Run() {
 
 func NewKafka(c Config, idx int) Forwarder {
 	fwd := &Kafka{
-		NewBase(c, idx),
+		Base: NewBase(c, idx),
+	}
+	var err error
+	if fwd.config.Kafka.KeyField != "" {
+		fwd.keyFieldTemplate, err = expr.Compile(
+			fwd.config.Kafka.KeyField,
+			expr.Env(snmp.MessageCompiled{}),
+		)
+		if err != nil {
+			fwd.logger.Fatal().Err(err).Msg("failed compiling kafka.key_field expression")
+		}
 	}
 	go fwd.Run()
 	return fwd

@@ -3,12 +3,13 @@ module github.com/bangunindo/trap2json
 go 1.20
 
 require (
+	github.com/Workiva/go-datastructures v1.1.0
+	github.com/antonmedv/expr v1.12.5
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/essentialkaos/go-zabbix v1.1.3
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/jackc/pgx/v5 v5.4.1
 	github.com/jmoiron/sqlx v1.3.5
-	github.com/maja42/goval v1.3.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
@@ -17,7 +18,7 @@ require (
 	github.com/sleepinggenius2/gosmi v0.4.4
 	github.com/spf13/viper v1.16.0
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
+	gopkg.in/guregu/null.v4 v4.0.0
 )
 
 require (

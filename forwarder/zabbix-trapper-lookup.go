@@ -101,7 +101,7 @@ func (z *ZabbixLookup) refresh() {
 		case "mysql":
 			err = db.GetContext(ctx, &isPost60, isPost60MysqlQuery)
 		default:
-			z.logger.Error().Msgf("unknown driver: %s", driver)
+			z.logger.Fatal().Msgf("unknown driver: %s", driver)
 			return
 		}
 		if err != nil {
@@ -115,7 +115,7 @@ func (z *ZabbixLookup) refresh() {
 		case 1:
 			err = db.SelectContext(ctx, &results, hostCacheQueryPost60, z.conf.ItemKey)
 		default:
-			z.logger.Error().Msg("assertion error, incorrect isPost60 result")
+			z.logger.Error().Msg("unexpected error, incorrect isPost60 result")
 			return
 		}
 		if err != nil {
@@ -161,7 +161,7 @@ func (z *ZabbixLookup) lookupByHostname(host string) (LookupResult, error) {
 	}
 }
 
-func (z *ZabbixLookup) Lookup(m snmp.Message, strategy LookupStrategy) (LookupResult, error) {
+func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupResult, error) {
 	if z.conf.Advanced != nil {
 		switch strategy {
 		case LookupFromOID:
@@ -173,12 +173,12 @@ func (z *ZabbixLookup) Lookup(m snmp.Message, strategy LookupStrategy) (LookupRe
 				}
 			}
 		case LookupFromAgentAddress:
-			if m.AgentAddress != nil {
-				return z.lookupByAddress(*m.AgentAddress)
+			if m.AgentAddress.Valid {
+				return z.lookupByAddress(m.AgentAddress.String)
 			}
 		case LookupFromSourceAddress:
-			if m.SourceAddress != nil {
-				return z.lookupByAddress(*m.SourceAddress)
+			if m.SrcAddress != "" {
+				return z.lookupByAddress(m.SrcAddress)
 			}
 		}
 	} else {
@@ -194,15 +194,15 @@ func (z *ZabbixLookup) Lookup(m snmp.Message, strategy LookupStrategy) (LookupRe
 				}
 			}
 		case LookupFromAgentAddress:
-			if m.AgentAddress != nil {
+			if m.AgentAddress.Valid {
 				return LookupResult{
-					Hostname: *m.AgentAddress,
+					Hostname: m.AgentAddress.String,
 				}, nil
 			}
 		case LookupFromSourceAddress:
-			if m.SourceAddress != nil {
+			if m.SrcAddress != "" {
 				return LookupResult{
-					Hostname: *m.SourceAddress,
+					Hostname: m.SrcAddress,
 				}, nil
 			}
 		}

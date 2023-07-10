@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"github.com/bangunindo/trap2json/logger"
 	"github.com/rs/zerolog"
@@ -8,7 +9,7 @@ import (
 	"os"
 )
 
-const defaultConfigPath = "/etc/trap2json"
+const defaultConfigPath = "/etc/trap2json/config.yml"
 
 func main() {
 	configPath := flag.String(
@@ -44,7 +45,7 @@ func main() {
 		}
 	} else {
 		log.Info().Msg("starting trap2json")
-		Run(c, os.Stdin, false)
+		Run(context.Background(), c, os.Stdin, false)
 		log.Info().Msg("trap2json exited")
 	}
 }

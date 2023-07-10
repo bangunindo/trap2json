@@ -21,20 +21,21 @@ type config struct {
 }
 
 func parseConfig(path string) (config, error) {
-	viper.SetDefault("logger.level", zerolog.InfoLevel)
-	viper.SetDefault("snmptrapd.listening", []string{"udp:10162", "udp6:10162"})
-	viper.SetDefault("parse_workers", runtime.NumCPU())
-	viper.SetDefault("prometheus.path", "/metrics")
-	viper.SetDefault("prometheus.port", 9285)
-	viper.SetDefault("snmptrapd.magic_begin", "--TFWDBEGIN--")
-	viper.SetDefault("snmptrapd.magic_end", "--TFWDEND--")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(path)
-	viper.AddConfigPath(".")
-	_ = viper.ReadInConfig()
+	v := viper.New()
+	v.SetDefault("logger.level", zerolog.InfoLevel)
+	v.SetDefault("snmptrapd.listening", []string{"udp:10162", "udp6:10162"})
+	v.SetDefault("parse_workers", runtime.NumCPU())
+	v.SetDefault("prometheus.path", "/metrics")
+	v.SetDefault("prometheus.port", 9285)
+	v.SetDefault("snmptrapd.magic_begin", "--TFWDBEGIN--")
+	v.SetDefault("snmptrapd.magic_end", "--TFWDEND--")
+	v.SetConfigFile(path)
+	err := v.ReadInConfig()
+	if err != nil {
+		return config{}, errors.Wrap(err, "failed reading config")
+	}
 	var c config
-	err := viper.Unmarshal(&c, viper.DecodeHook(mapstructure.TextUnmarshallerHookFunc()))
+	err = v.Unmarshal(&c, viper.DecodeHook(mapstructure.TextUnmarshallerHookFunc()))
 	if err != nil {
 		return config{}, errors.Wrap(err, "failed unmarshalling configuration")
 	}

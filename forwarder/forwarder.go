@@ -3,44 +3,66 @@ package forwarder
 import (
 	"context"
 	"encoding/json"
+	"github.com/Workiva/go-datastructures/queue"
+	"github.com/antonmedv/expr"
+	"github.com/antonmedv/expr/vm"
 	"github.com/bangunindo/trap2json/metrics"
 	"github.com/bangunindo/trap2json/snmp"
-	"github.com/maja42/goval"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/exp/maps"
-	"regexp"
+	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
+
+type Duration struct {
+	time.Duration
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+func (d *Duration) UnmarshalText(b []byte) error {
+	if d == nil {
+		return errors.New("can't unmarshal a nil *Duration")
+	}
+	var err error
+	d.Duration, err = time.ParseDuration(string(b))
+	return err
+}
+
+type AutoRetry struct {
+	Enable     bool
+	MaxRetries int      `mapstructure:"max_retries"`
+	MinDelay   Duration `mapstructure:"min_delay"`
+	MaxDelay   Duration `mapstructure:"max_delay"`
+}
 
 type Config struct {
 	// ID identifies forwarder name, also used for prometheus labelling
 	ID string
 	// QueueSize defines the size of queue of each forwarder, when queue is full (might be caused
 	// by slow forwarder) the message is dropped
-	QueueSize uint `mapstructure:"queue_size"`
-	// AgentAddressObjectPrefix populates Message.AgentAddress
-	AgentAddressObjectPrefix string `mapstructure:"agent_address_object_prefix"`
+	QueueSize int `mapstructure:"queue_size"`
 	// TimeFormat specifies golang time format for casting time related fields to string
 	TimeFormat string `mapstructure:"time_format"`
 	// TimeAsTimezone will cast any time field to specified timezone
-	TimeAsTimezone string `mapstructure:"time_as_timezone"`
-	// Filter, JSONFormat, ValueJSONFormat utilizes maja42/goval expressions
-	Filter          string
-	JSONFormat      string `mapstructure:"json_format"`
-	ValueJSONFormat string `mapstructure:"value_json_format"`
-	ValueJSONIsFlat bool   `mapstructure:"value_json_is_flat"`
-	File            *FileConfig
-	Kafka           *KafkaConfig
-	MQTT            *MQTTConfig
-	Trap            *SNMPTrapConfig
-	ZabbixTrapper   *ZabbixTrapperConfig `mapstructure:"zabbix_trapper"`
+	TimeAsTimezone   string   `mapstructure:"time_as_timezone"`
+	ShutdownWaitTime Duration `mapstructure:"shutdown_wait_time"`
+	// Filter, JSONFormat utilizes antonmedv/expr expressions
+	Filter        string
+	JSONFormat    string    `mapstructure:"json_format"`
+	AutoRetry     AutoRetry `mapstructure:"auto_retry"`
+	Mock          *MockConfig
+	File          *FileConfig
+	Kafka         *KafkaConfig
+	MQTT          *MQTTConfig
+	Trap          *SNMPTrapConfig
+	ZabbixTrapper *ZabbixTrapperConfig `mapstructure:"zabbix_trapper"`
 }
 
 func (c *Config) Type() string {
@@ -54,6 +76,8 @@ func (c *Config) Type() string {
 		return "trap"
 	} else if c.ZabbixTrapper != nil {
 		return "zabbix_trapper"
+	} else if c.Mock != nil {
+		return "mock"
 	} else {
 		return "unknown"
 	}
@@ -62,225 +86,115 @@ func (c *Config) Type() string {
 type Forwarder interface {
 	// Send will send the trap message to its corresponding forwarder.
 	// Does nothing if the queue buffer is full or forwarder is already closed
-	Send(message snmp.Message)
+	Send(message *snmp.Message)
 	// Close informs the forwarder to stop processing any new messages
 	Close()
 	// Done informs the caller if forwarder is done processing
 	Done() <-chan struct{}
 }
 
-var evalFunctions = map[string]goval.ExpressionFunction{
-	// args: value field, regex pattern, message values
-	"valueSelect": func(args ...any) (any, error) {
-		if len(args) != 3 {
-			return nil, errors.New("needs 3 arguments")
-		}
-		field, ok := args[0].(string)
-		if !ok {
-			return nil, errors.New("first argument should be string")
-		}
-		regexPattern, ok := args[1].(string)
-		if !ok {
-			return nil, errors.New("second argument should be string")
-		}
-		pattern, err := regexp.Compile(regexPattern)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid regex pattern on second argument")
-		}
-		values, ok := args[2].([]map[string]any)
-		if !ok {
-			return nil, errors.New("third argument should be list of values")
-		}
-		for _, val := range values {
-			var valStr string
-			if field == "type" {
-				if s, ok := val[field].(snmp.ValueType); ok {
-					valStr = s.String()
-				}
-			} else {
-				if s, ok := val[field].(string); ok {
-					valStr = s
-				}
-			}
-			if valStr == "" {
-				continue
-			}
-			if pattern.MatchString(valStr) {
-				return val, nil
-			}
-		}
-		emptyVal := map[string]any{}
-		err = mapstructure.Decode(snmp.Value{}, &emptyVal)
-		return emptyVal, err
-	},
-}
-
 type Base struct {
 	idx             string
 	fwdType         string
 	config          Config
-	channel         chan snmp.Message
+	queue           *queue.PriorityQueue
 	ctx             context.Context
 	cancel          context.CancelFunc
 	ctrProcessed    prometheus.Counter
 	ctrSucceeded    prometheus.Counter
 	ctrDropped      prometheus.Counter
+	ctrRetried      prometheus.Counter
 	ctrFiltered     prometheus.Counter
 	ctrLookupFailed prometheus.Counter
 	ctrQueueCap     prometheus.Gauge
 	ctrQueueLen     prometheus.Gauge
 	logger          zerolog.Logger
+	CompilerConf    snmp.MessageCompiler
+}
+
+// Get returns error only if the queue is closed
+func (b *Base) Get() (*snmp.Message, error) {
+	var msg *snmp.Message
+	for {
+		if b.queue.Disposed() {
+			return nil, queue.ErrDisposed
+		}
+		m := b.queue.Peek()
+		if m == nil {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		} else {
+			msg = m.(*snmp.Message)
+			if msg.Eta.Before(time.Now()) {
+				break
+			} else {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+		}
+	}
+	if m, err := b.queue.Get(1); err == nil {
+		msg = m[0].(*snmp.Message)
+		return msg, nil
+	} else {
+		return nil, err
+	}
 }
 
 // Send snmp message to forwarder
-// TODO: requeue message if the forwarder fails to send the messages
-func (b *Base) Send(message snmp.Message) {
-	select {
-	case b.channel <- message:
-	default:
+func (b *Base) Send(message *snmp.Message) {
+	if b.config.QueueSize == 0 || b.queue.Len() < b.config.QueueSize {
+		err := b.queue.Put(message)
+		if err != nil {
+			b.logger.Error().Msg("unexpected error, queue is closed")
+			b.ctrDropped.Inc()
+		}
+	} else {
+		b.logger.Warn().Msg("queue is full, consider increasing queue_size for this forwarder")
+		b.ctrDropped.Inc()
+	}
+}
+
+func (b *Base) Retry(message *snmp.Message, err error) {
+	if b.config.AutoRetry.Enable && message.Retries < b.config.AutoRetry.MaxRetries {
+		eta := message.ComputeEta(
+			b.config.AutoRetry.MinDelay.Duration,
+			b.config.AutoRetry.MaxDelay.Duration,
+		)
+		message.Retries++
+		message.Eta = eta
+		b.ctrRetried.Inc()
+		b.logger.Debug().Err(err).Msg("retrying to forward trap")
+		b.Send(message)
+	} else {
+		b.logger.Warn().Err(err).Msg("failed forwarding trap")
 		b.ctrDropped.Inc()
 	}
 }
 
 func (b *Base) Close() {
-	close(b.channel)
+	go func() {
+		if b.config.ShutdownWaitTime.Duration > 0 {
+			timeout := time.After(b.config.ShutdownWaitTime.Duration)
+		outer:
+			for {
+				select {
+				case <-timeout:
+					break outer
+				default:
+					if b.queue.Empty() {
+						break outer
+					}
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		b.queue.Dispose()
+	}()
 }
 
 func (b *Base) Done() <-chan struct{} {
 	return b.ctx.Done()
-}
-
-func (b *Base) filter(msgVars map[string]any) (bool, error) {
-	if b.config.Filter == "" {
-		return true, nil
-	}
-	eval := goval.NewEvaluator()
-	if v, err := eval.Evaluate(b.config.Filter, msgVars, evalFunctions); err != nil {
-		return false, errors.Wrap(err, "failed evaluating filters")
-	} else if val, ok := v.(bool); !ok {
-		return false, errors.New("return value is not boolean")
-	} else {
-		return val, nil
-	}
-}
-
-func (b *Base) shouldContinue(m snmp.Message) (map[string]any, bool) {
-	mVal := map[string]any{}
-	var mValues []map[string]any
-	err := mapstructure.Decode(m, &mVal)
-	if err != nil {
-		b.logger.Debug().Interface("message", m).Msgf("unexpected error, failed decoding mapstructure")
-		b.ctrDropped.Inc()
-		return nil, false
-	} else {
-		for k, v := range mVal {
-			switch vcast := v.(type) {
-			case *float64:
-				if vcast != nil {
-					mVal[k] = *vcast
-				}
-			case *string:
-				if vcast != nil {
-					mVal[k] = *vcast
-				}
-			case *int:
-				if vcast != nil {
-					mVal[k] = *vcast
-				}
-			}
-		}
-	}
-	err = mapstructure.Decode(m.Values, &mValues)
-	if err != nil {
-		b.logger.Debug().Interface("values", m.Values).Msgf("unexpected error, failed decoding mapstructure")
-		b.ctrDropped.Inc()
-		return nil, false
-	}
-	mVal["values"] = mValues
-	if passThrough, err := b.filter(mVal); err != nil {
-		b.logger.Debug().Err(err).Interface("message", m).Msgf("filter expression failed")
-	} else if !passThrough {
-		b.ctrFiltered.Inc()
-		return nil, false
-	}
-	if b.config.ValueJSONFormat != "" {
-		eval := goval.NewEvaluator()
-		if b.config.ValueJSONIsFlat {
-			valuesFormattedFlat := map[string]any{}
-			for _, v := range mValues {
-				if vFmt, err := eval.Evaluate(b.config.ValueJSONFormat, v, evalFunctions); err != nil {
-					b.logger.Debug().Err(err).Interface("value", v).Msgf("value format expression failed")
-				} else if vCast, ok := vFmt.(map[string]any); ok {
-					maps.Copy(valuesFormattedFlat, vCast)
-				}
-			}
-			mVal["values_formatted"] = valuesFormattedFlat
-		} else {
-			var valuesFormattedList []any
-			for _, v := range mValues {
-				if vFmt, err := eval.Evaluate(b.config.ValueJSONFormat, v, evalFunctions); err != nil {
-					b.logger.Debug().Err(err).Interface("value", v).Msgf("value format expression failed")
-				} else {
-					valuesFormattedList = append(valuesFormattedList, vFmt)
-				}
-			}
-			mVal["values_formatted"] = valuesFormattedList
-		}
-	}
-	return mVal, true
-}
-
-func (b *Base) processMessage(m snmp.Message) (mJson []byte, mVal map[string]any, skip bool) {
-	var err error
-	b.ctrProcessed.Inc()
-	if m.LocalTime != nil {
-		m.LocalTime.SetLayout(b.config.TimeFormat)
-		m.LocalTime.SetTimezone(b.config.TimeAsTimezone)
-	}
-	prefix := strings.TrimRight(b.config.AgentAddressObjectPrefix, ".")
-	for i, v := range m.Values {
-		if b.config.AgentAddressObjectPrefix != "" && v.HasOIDPrefix(prefix) {
-			if vStr, ok := v.Value.(string); ok {
-				m.AgentAddress = &vStr
-			}
-		}
-		if v.Type == snmp.TypeDateAndTime {
-			if vTime, ok := v.Value.(snmp.TimeJson); ok {
-				vTime.SetLayout(b.config.TimeFormat)
-				vTime.SetTimezone(b.config.TimeAsTimezone)
-				m.Values[i].Value = vTime.String()
-			}
-		}
-	}
-	// filter and json_format not defined, bypass any goval operations
-	if b.config.Filter == "" &&
-		b.config.JSONFormat == "" &&
-		b.config.ValueJSONFormat == "" {
-		mJson, err = json.Marshal(m)
-	} else {
-		var ok bool
-		mVal, ok = b.shouldContinue(m)
-		if !ok {
-			skip = true
-			return
-		}
-		if b.config.JSONFormat == "" {
-			mJson, err = json.Marshal(m)
-		} else {
-			eval := goval.NewEvaluator()
-			var v any
-			v, err = eval.Evaluate(b.config.JSONFormat, mVal, evalFunctions)
-			if err == nil {
-				mJson, err = json.Marshal(v)
-			}
-		}
-	}
-	if err != nil {
-		b.logger.Debug().Err(err).Msg("dropping message")
-		b.ctrDropped.Inc()
-		skip = true
-	}
-	return
 }
 
 func NewBase(c Config, idx int) Base {
@@ -291,7 +205,7 @@ func NewBase(c Config, idx int) Base {
 		idx:     idxStr,
 		fwdType: fwdType,
 		config:  c,
-		channel: make(chan snmp.Message, c.QueueSize),
+		queue:   queue.NewPriorityQueue(c.QueueSize, true),
 		ctx:     ctx,
 		cancel:  cancel,
 		ctrProcessed: metrics.ForwarderProcessed.With(prometheus.Labels{
@@ -305,6 +219,11 @@ func NewBase(c Config, idx int) Base {
 			"id":    c.ID,
 		}),
 		ctrDropped: metrics.ForwarderDropped.With(prometheus.Labels{
+			"index": idxStr,
+			"type":  fwdType,
+			"id":    c.ID,
+		}),
+		ctrRetried: metrics.ForwarderRetried.With(prometheus.Labels{
 			"index": idxStr,
 			"type":  fwdType,
 			"id":    c.ID,
@@ -337,13 +256,44 @@ func NewBase(c Config, idx int) Base {
 			Str("id", c.ID).
 			Logger(),
 	}
+	var filterExpr, formatExpr *vm.Program
+	var err error
+	if c.Filter != "" {
+		opts := []expr.Option{expr.AsBool(), expr.Env(snmp.MessageCompiled{})}
+		opts = append(opts, snmp.Functions...)
+		filterExpr, err = expr.Compile(
+			c.Filter,
+			opts...,
+		)
+		if err != nil {
+			base.logger.Fatal().Err(err).Msg("failed compiling filter expression")
+		}
+	}
+	if c.JSONFormat != "" {
+		opts := []expr.Option{expr.AsKind(reflect.Map), expr.Env(snmp.MessageCompiled{})}
+		opts = append(opts, snmp.Functions...)
+		formatExpr, err = expr.Compile(
+			c.JSONFormat,
+			opts...,
+		)
+		if err != nil {
+			base.logger.Fatal().Err(err).Msg("failed compiling json_format expression")
+		}
+	}
+	base.CompilerConf = snmp.MessageCompiler{
+		TimeFormat:     c.TimeFormat,
+		TimeAsTimezone: c.TimeAsTimezone,
+		Filter:         filterExpr,
+		JSONFormat:     formatExpr,
+		Logger:         base.logger,
+	}
 	// prometheus exporter for queue length
 	go func() {
-		base.ctrQueueCap.Set(float64(cap(base.channel)))
+		base.ctrQueueCap.Set(float64(c.QueueSize))
 		for {
 			select {
 			case <-time.After(time.Second):
-				base.ctrQueueLen.Set(float64(len(base.channel)))
+				base.ctrQueueLen.Set(float64(base.queue.Len()))
 			case <-base.ctx.Done():
 				return
 			}
@@ -361,10 +311,38 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 			Msg("no forwarders configured")
 	}
 	for i, fwd := range c {
+		modLogger := log.With().
+			Str("module", "forwarder").
+			Str("id", fwd.ID).
+			Int("index", i+1).
+			Logger()
 		if fwd.QueueSize == 0 {
 			fwd.QueueSize = 10000
 		}
+		if fwd.QueueSize < 0 {
+			fwd.QueueSize = 0
+		}
+		if fwd.AutoRetry.MaxRetries == 0 {
+			fwd.AutoRetry.MaxRetries = 10
+		}
+		if fwd.AutoRetry.MinDelay.Duration == 0 {
+			fwd.AutoRetry.MinDelay.Duration = time.Second
+		}
+		if fwd.AutoRetry.MaxDelay.Duration == 0 {
+			fwd.AutoRetry.MaxDelay.Duration = time.Hour
+		}
+		if fwd.AutoRetry.MinDelay.Duration > fwd.AutoRetry.MaxDelay.Duration {
+			if fwd.AutoRetry.Enable {
+				modLogger.Warn().Msg("min_delay is larger than max_delay, will set max_delay the same as min_delay")
+			}
+			fwd.AutoRetry.MaxDelay = fwd.AutoRetry.MinDelay
+		}
+		if fwd.ShutdownWaitTime.Duration == 0 {
+			fwd.ShutdownWaitTime.Duration = 5 * time.Second
+		}
 		switch fwd.Type() {
+		case "mock":
+			forwarders = append(forwarders, NewMock(fwd, i))
 		case "file":
 			forwarders = append(forwarders, NewFile(fwd, i))
 		case "kafka":
@@ -389,16 +367,14 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 			}
 			forwarders = append(forwarders, NewZabbixTrapper(fwd, i))
 		default:
-			log.Warn().
-				Str("module", "forwarder").
-				Str("id", fwd.ID).
-				Int("index", i+1).
-				Msg("please define your forwarder destination")
+			modLogger.Warn().Msg("please define your forwarder destination")
 		}
 	}
 	for msg := range messageChan {
 		for _, fwd := range forwarders {
-			fwd.Send(msg)
+			mCopy := msg.Copy()
+			mCopy.Eta = time.Now()
+			fwd.Send(&mCopy)
 		}
 	}
 	for _, fwd := range forwarders {

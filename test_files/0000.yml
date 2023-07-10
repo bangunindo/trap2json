@@ -1,0 +1,4 @@
+forwarders:
+  - id: Test regular message
+    mock:
+      timeout: 0s
