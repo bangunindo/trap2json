@@ -169,7 +169,12 @@ snmptrapd:
     # WARNING: you have to know what you're doing, as it might break the application
     # you can add additional config for snmptrapd.conf here, for example, adding tls/dtls connection config
   auth:
-    # by default auth is disabled, and any v1 and v2 traps will be forwarded
+    # if this is disabled:
+    # - any v1/v2c community will work
+    # - v3 noAuthNoPriv will work regardless of no_auth/require_privacy config
+    # if this is enabled:
+    # - only listed v1/v2c communities will work
+    # - v3 will work on specified no_auth/require_privacy config
     enable: false
     # community name list for v1 and v2
     community:
@@ -184,7 +189,8 @@ snmptrapd:
         # no_auth config will be ignored if this is set to true
         require_privacy: false
         # set engine id to be allowed for this user
-        engine_id: ""
+        # required for snmptrap, not required for snmpinform
+        engine_id: "0x8000000001020304"
         # possible values: MD5, SHA
         auth_type: SHA
         # required
