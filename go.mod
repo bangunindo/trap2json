@@ -4,11 +4,11 @@ go 1.20
 
 require (
 	github.com/Workiva/go-datastructures v1.1.0
-	github.com/antonmedv/expr v1.12.5
+	github.com/antonmedv/expr v1.12.6
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/essentialkaos/go-zabbix v1.1.3
 	github.com/go-sql-driver/mysql v1.7.1
-	github.com/jackc/pgx/v5 v5.4.1
+	github.com/jackc/pgx/v5 v5.4.2
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
