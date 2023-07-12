@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -17,13 +18,35 @@ import (
 func TestRun(t *testing.T) {
 	var i int
 	for {
-		jsonF := fmt.Sprintf("test_files/%04d.json", i)
-		confF := fmt.Sprintf("test_files/%04d.yml", i)
-		logF := fmt.Sprintf("test_files/%04d.log", i)
+		jsonFGlob := fmt.Sprintf("test_files/%04d_*.json", i)
+		confFGlob := fmt.Sprintf("test_files/%04d_*.yml", i)
+		logFGlob := fmt.Sprintf("test_files/%04d_*.log", i)
+
+		jsonFList, err := filepath.Glob(jsonFGlob)
+		assert.NoError(t, err)
+		if len(jsonFList) == 0 {
+			break
+		}
+		assert.Equal(t, 1, len(jsonFList))
+		jsonF := jsonFList[0]
+		confFList, err := filepath.Glob(confFGlob)
+		assert.NoError(t, err)
+		if len(confFList) == 0 {
+			break
+		}
+		assert.Equal(t, 1, len(confFList))
+		confF := confFList[0]
+		logFList, err := filepath.Glob(logFGlob)
+		assert.NoError(t, err)
+		if len(logFList) == 0 {
+			break
+		}
+		assert.Equal(t, 1, len(logFList))
+		logF := logFList[0]
 
 		conf, err := parseConfig(confF)
-		if err != nil {
-			break
+		if !assert.NoError(t, err) {
+			continue
 		}
 		logger.InitLogger(conf.Logger, os.Stderr)
 		outChan := make(chan *snmp.Message, 5)
@@ -32,12 +55,12 @@ func TestRun(t *testing.T) {
 
 		log, err := os.Open(logF)
 		if !assert.NoError(t, err) {
-			break
+			continue
 		}
 
 		jsonFOpen, err := os.Open(jsonF)
 		if !assert.NoError(t, err) {
-			break
+			continue
 		}
 		jsonBytes, err := io.ReadAll(jsonFOpen)
 		assert.NoError(t, err)

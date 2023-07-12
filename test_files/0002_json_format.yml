@@ -1,5 +1,5 @@
 forwarders:
-  - id: Test JSON template
+  - id: Test JSON format
     json_format: '{"community": community, "values": MergeMap(map(values, { {(.mib_name): .value} }))}'
     mock:
       timeout: 0s
