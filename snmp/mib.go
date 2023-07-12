@@ -60,7 +60,11 @@ func InitMIBTranslator(mibPath string) ([]string, error) {
 	mibInitLock.Lock()
 	defer mibInitLock.Unlock()
 	if mibInit {
-		return nil, nil
+		var modules []string
+		for _, m := range gosmi.GetLoadedModules() {
+			modules = append(modules, m.Name)
+		}
+		return modules, nil
 	}
 	var failedModules []string
 	var succeededModules []string
