@@ -7,14 +7,15 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"os"
+	"path"
 )
 
-const defaultConfigPath = "/etc/trap2json/config.yml"
+const defaultConfigPath = "/etc/trap2json"
 
 func main() {
 	configPath := flag.String(
 		"config",
-		defaultConfigPath,
+		path.Join(defaultConfigPath, "config.yml"),
 		"path to config file",
 	)
 	snmptrapdConfPath := flag.String(
