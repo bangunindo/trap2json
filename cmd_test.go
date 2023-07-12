@@ -46,6 +46,7 @@ func TestRun(t *testing.T) {
 
 		conf, err := parseConfig(confF)
 		if !assert.NoError(t, err) {
+			i++
 			continue
 		}
 		logger.InitLogger(conf.Logger, os.Stderr)
@@ -55,11 +56,13 @@ func TestRun(t *testing.T) {
 
 		log, err := os.Open(logF)
 		if !assert.NoError(t, err) {
+			i++
 			continue
 		}
 
 		jsonFOpen, err := os.Open(jsonF)
 		if !assert.NoError(t, err) {
+			i++
 			continue
 		}
 		jsonBytes, err := io.ReadAll(jsonFOpen)
