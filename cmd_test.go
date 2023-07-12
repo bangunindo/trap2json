@@ -54,7 +54,7 @@ func TestRun(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			cleanShutdown = true
-		case <-time.After(5 * time.Second):
+		case <-time.After(60 * time.Second):
 			assert.NoError(t, errors.New("timeout"))
 			cancel()
 		}

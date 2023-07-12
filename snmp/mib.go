@@ -6,11 +6,13 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const mibDefaultPath = "/usr/share/snmp/mibs"
 
 var mibInit = false
+var mibInitLock = new(sync.Mutex)
 
 type mibPaths struct {
 	dirs    []string
@@ -55,6 +57,8 @@ func getMibFiles(path string) (mibPaths, error) {
 }
 
 func InitMIBTranslator(mibPath string) ([]string, error) {
+	mibInitLock.Lock()
+	defer mibInitLock.Unlock()
 	if mibInit {
 		return nil, nil
 	}
