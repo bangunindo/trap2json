@@ -32,16 +32,16 @@ The supported way of running Trap2JSON is to use docker. Docker image is availab
 on [dockerhub](https://hub.docker.com/r/bangunindo/trap2json).
 You can see sample config and its explanations at [config.yml](config.yml)
 ```shell
-docker run -v config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
+docker run -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
 ```
 The docker image has default MIBs retrieved via snmp-mibs-downloader.
 If you have your own MIBs, place it under `/etc/trap2json/mibs`
 ```shell
-docker run -v /path/to/mibs:/etc/trap2json/mibs -v config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
+docker run -v /path/to/mibs:/etc/trap2json/mibs -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
 ```
 You might also want to adjust the timezone for better data readability
 ```shell
-docker run -e TZ=Asia/Jakarta -v config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
+docker run -e TZ=Asia/Jakarta -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
 ```
 
 ## Zabbix Forwarder
