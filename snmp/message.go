@@ -230,11 +230,15 @@ func (v Value) Compile(conf MessageCompiler) ValueCompiled {
 	}
 }
 
+func hasOIDPrefix(prefix, oid, mibName string) bool {
+	return oid == prefix ||
+		mibName == prefix ||
+		strings.HasPrefix(oid, prefix+".") ||
+		strings.HasPrefix(mibName, prefix+".")
+}
+
 func (v Value) HasOIDPrefix(prefix string) bool {
-	return v.OID == prefix ||
-		v.MIBName.String == prefix ||
-		strings.HasPrefix(v.OID, prefix+".") ||
-		strings.HasPrefix(v.MIBName.String, prefix+".")
+	return hasOIDPrefix(prefix, v.OID, v.MIBName.String)
 }
 
 func (v Value) SnmpCmd() (cmd []string) {
@@ -362,36 +366,195 @@ type MessageCompiled struct {
 	Values            []ValueCompiled `expr:"values"`
 }
 
+func prepareValues(val any) ([]map[string]any, error) {
+	switch vList := val.(type) {
+	case []map[string]any:
+		return vList, nil
+	case []any:
+		var res []map[string]any
+		for _, m := range vList {
+			if mCast, ok := m.(map[string]any); ok {
+				res = append(res, mCast)
+			} else {
+				return nil, errors.Errorf("incorrect type passed %s", reflect.TypeOf(m))
+			}
+		}
+		return res, nil
+	case nil:
+		return nil, nil
+	default:
+		return nil, errors.Errorf("incorrect type passed %s", reflect.TypeOf(val))
+	}
+}
+
+func getOidValue(val []map[string]any, oidPrefix string) any {
+	for _, m := range val {
+		var oid, mibName string
+		if oidAny, ok := m["oid"]; !ok {
+			continue
+		} else if oid, ok = oidAny.(string); !ok {
+			continue
+		}
+		if mibNameAny, ok := m["mib_name"]; !ok {
+			continue
+		} else if mibName, ok = mibNameAny.(string); !ok {
+			continue
+		}
+		if hasOIDPrefix(oidPrefix, oid, mibName) {
+			return m["value"]
+		}
+	}
+	return nil
+}
+
 var Functions = []expr.Option{
 	expr.Function(
 		"MergeMap",
 		func(params ...any) (any, error) {
-			switch vList := params[0].(type) {
-			case []map[string]any:
+			if val, err := prepareValues(params[0]); err != nil {
+				return nil, err
+			} else {
 				res := make(map[string]any)
-				for _, m := range vList {
+				for _, m := range val {
 					for k, v := range m {
 						res[k] = v
 					}
 				}
 				return res, nil
-			case []any:
-				res := make(map[string]any)
-				for _, m := range vList {
-					if mCast, ok := m.(map[string]any); !ok {
-						return nil, errors.Errorf("incorrect type passed %s", reflect.TypeOf(m))
-					} else {
-						for k, v := range mCast {
-							res[k] = v
-						}
-					}
-				}
-				return res, nil
-			default:
-				return nil, errors.Errorf("incorrect type passed %s", reflect.TypeOf(params[0]))
 			}
 		},
 		new(func([]map[string]any) map[string]any),
+	),
+	expr.Function(
+		"OidValueAny",
+		func(params ...any) (any, error) {
+			if val, err := prepareValues(params[0]); err != nil {
+				return nil, err
+			} else {
+				prefix, ok := params[1].(string)
+				if !ok {
+					return nil, errors.Errorf(
+						"unexpected error, invalid second param type %s",
+						reflect.TypeOf(params[1]),
+					)
+				}
+				valOid := getOidValue(val, prefix)
+				return valOid, nil
+			}
+		},
+		new(func([]map[string]any, string) any),
+	),
+	expr.Function(
+		"OidValueNumber",
+		func(params ...any) (any, error) {
+			if val, err := prepareValues(params[0]); err != nil {
+				return nil, err
+			} else {
+				prefix, ok := params[1].(string)
+				if !ok {
+					return nil, errors.Errorf(
+						"unexpected error, invalid second param type %s",
+						reflect.TypeOf(params[1]),
+					)
+				}
+				tryCast, ok := params[2].(bool)
+				if !ok {
+					return nil, errors.Errorf(
+						"unexpected error, invalid third param type %s",
+						reflect.TypeOf(params[2]),
+					)
+				}
+				valOid := getOidValue(val, prefix)
+				switch v := valOid.(type) {
+				case int:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case int8:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case int16:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case int32:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case int64:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case uint:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case uint8:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case uint16:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case uint32:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case uint64:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case float32:
+					vFloat := float64(v)
+					return &vFloat, nil
+				case float64:
+					return &v, nil
+				case nil:
+					return nil, nil
+				default:
+					if tryCast {
+						if s, err := strconv.ParseFloat(fmt.Sprint(v), 64); err != nil {
+							return nil, nil
+						} else {
+							return &s, nil
+						}
+					} else {
+						return nil, nil
+					}
+				}
+			}
+		},
+		new(func([]map[string]any, string, bool) *float64),
+	),
+	expr.Function(
+		"OidValueString",
+		func(params ...any) (any, error) {
+			if val, err := prepareValues(params[0]); err != nil {
+				return nil, err
+			} else {
+				prefix, ok := params[1].(string)
+				if !ok {
+					return nil, errors.Errorf(
+						"unexpected error, invalid second param type %s",
+						reflect.TypeOf(params[1]),
+					)
+				}
+				tryCast, ok := params[2].(bool)
+				if !ok {
+					return nil, errors.Errorf(
+						"unexpected error, invalid third param type %s",
+						reflect.TypeOf(params[2]),
+					)
+				}
+				valOid := getOidValue(val, prefix)
+				switch v := valOid.(type) {
+				case string:
+					return &v, nil
+				case nil:
+					return nil, nil
+				default:
+					if tryCast {
+						s := fmt.Sprint(v)
+						return &s, nil
+					} else {
+						return nil, nil
+					}
+				}
+			}
+		},
+		new(func([]map[string]any, string, bool) *string),
 	),
 }
 
