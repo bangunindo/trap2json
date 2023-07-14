@@ -55,7 +55,14 @@ forwarders:
     # agent_address, pdu_version, snmp_version, community, enterprise_oid, enterprise_mib_name,
     # user, context, description, trap_type, trap_sub_type, values
     # possible functions:
+    # merges list of dictionary to dictionary
     # - MergeMap(list of map) // key has to be string
+    # extract value by oid, and return any value
+    # - OidValueAny(values, oid_or_mib_name_string)
+    # extract value by oid, and return only number types, or try to cast any data to number
+    # - OidValueNumber(values, oid_or_mib_name_string, try_cast_boolean)
+    # extract value by oid, and return only string types, or try to cast any data to string
+    # - OidValueString(values, oid_or_mib_name_string, try_cast_boolean)
     # - built-in functions as mentioned in https://expr.medv.io/docs/Language-Definition
     # default: as mentioned on possible variables
     json_format: '{"test": community, "test2": time, "values": MergeMap(map(values, { {(.mib_name): .value} }))}'
