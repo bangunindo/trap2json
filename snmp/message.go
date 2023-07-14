@@ -387,21 +387,10 @@ func prepareValues(val any) ([]map[string]any, error) {
 	}
 }
 
-func getOidValue(val []map[string]any, oidPrefix string) any {
+func getOidValue(val []ValueCompiled, oidPrefix string) any {
 	for _, m := range val {
-		var oid, mibName string
-		if oidAny, ok := m["oid"]; !ok {
-			continue
-		} else if oid, ok = oidAny.(string); !ok {
-			continue
-		}
-		if mibNameAny, ok := m["mib_name"]; !ok {
-			continue
-		} else if mibName, ok = mibNameAny.(string); !ok {
-			continue
-		}
-		if hasOIDPrefix(oidPrefix, oid, mibName) {
-			return m["value"]
+		if hasOIDPrefix(oidPrefix, m.OID, m.MIBName) {
+			return m.Value
 		}
 	}
 	return nil
@@ -428,8 +417,11 @@ var Functions = []expr.Option{
 	expr.Function(
 		"OidValueAny",
 		func(params ...any) (any, error) {
-			if val, err := prepareValues(params[0]); err != nil {
-				return nil, err
+			if val, ok := params[0].([]ValueCompiled); !ok {
+				return nil, errors.Errorf(
+					"unexpected error, invalid first param type %s",
+					reflect.TypeOf(params[0]),
+				)
 			} else {
 				prefix, ok := params[1].(string)
 				if !ok {
@@ -442,13 +434,16 @@ var Functions = []expr.Option{
 				return valOid, nil
 			}
 		},
-		new(func([]map[string]any, string) any),
+		new(func([]ValueCompiled, string) any),
 	),
 	expr.Function(
 		"OidValueNumber",
 		func(params ...any) (any, error) {
-			if val, err := prepareValues(params[0]); err != nil {
-				return nil, err
+			if val, ok := params[0].([]ValueCompiled); !ok {
+				return nil, errors.Errorf(
+					"unexpected error, invalid first param type %s",
+					reflect.TypeOf(params[0]),
+				)
 			} else {
 				prefix, ok := params[1].(string)
 				if !ok {
@@ -516,13 +511,16 @@ var Functions = []expr.Option{
 				}
 			}
 		},
-		new(func([]map[string]any, string, bool) *float64),
+		new(func([]ValueCompiled, string, bool) *float64),
 	),
 	expr.Function(
 		"OidValueString",
 		func(params ...any) (any, error) {
-			if val, err := prepareValues(params[0]); err != nil {
-				return nil, err
+			if val, ok := params[0].([]ValueCompiled); !ok {
+				return nil, errors.Errorf(
+					"unexpected error, invalid first param type %s",
+					reflect.TypeOf(params[0]),
+				)
 			} else {
 				prefix, ok := params[1].(string)
 				if !ok {
@@ -554,7 +552,7 @@ var Functions = []expr.Option{
 				}
 			}
 		},
-		new(func([]map[string]any, string, bool) *string),
+		new(func([]ValueCompiled, string, bool) *string),
 	),
 }
 

@@ -1,5 +1,5 @@
 forwarders:
   - id: Test JSON format
-    json_format: '{"community": community, "values": MergeMap(map(values, { {(.mib_name): .value} }))}'
+    json_format: '{"community": community, "values": MergeMap(map(values, { {(.mib_name): .value} })), "duration": OidValueString(values, "DISMAN-EVENT-MIB::sysUpTimeInstance", false)}'
     mock:
       timeout: 0s
