@@ -17,14 +17,27 @@ type AuthType int8
 const (
 	AuthSHA AuthType = iota
 	AuthMD5
+	AuthSHA128
+	AuthSHA224
+	AuthSHA256
+	AuthSHA384
+	AuthSHA512
 )
 
 func (a *AuthType) String() string {
 	switch *a {
 	case AuthMD5:
 		return "MD5"
-	case AuthSHA:
+	case AuthSHA, AuthSHA128:
 		return "SHA"
+	case AuthSHA224:
+		return "SHA-224"
+	case AuthSHA256:
+		return "SHA-256"
+	case AuthSHA384:
+		return "SHA-384"
+	case AuthSHA512:
+		return "SHA-512"
 	default:
 		return ""
 	}
@@ -35,10 +48,18 @@ func (a *AuthType) UnmarshalText(text []byte) error {
 		return errors.New("can't unmarshal a nil *AuthType")
 	}
 	switch strings.ToLower(string(text)) {
-	case "sha":
-		*a = AuthSHA
 	case "md5":
 		*a = AuthMD5
+	case "sha", "sha-128":
+		*a = AuthSHA
+	case "sha-224":
+		*a = AuthSHA224
+	case "sha-256":
+		*a = AuthSHA256
+	case "sha-384":
+		*a = AuthSHA384
+	case "sha-512":
+		*a = AuthSHA512
 	default:
 		return errors.Errorf("unsupported AuthType: %s", string(text))
 	}
@@ -50,14 +71,21 @@ type PrivacyProtocol int8
 const (
 	PrivAES PrivacyProtocol = iota
 	PrivDES
+	PrivAES128
+	PrivAES192
+	PrivAES256
 )
 
 func (p *PrivacyProtocol) String() string {
 	switch *p {
-	case PrivAES:
-		return "AES"
 	case PrivDES:
 		return "DES"
+	case PrivAES, PrivAES128:
+		return "AES"
+	case PrivAES192:
+		return "AES-192"
+	case PrivAES256:
+		return "AES-256"
 	default:
 		return ""
 	}
@@ -68,10 +96,14 @@ func (p *PrivacyProtocol) UnmarshalText(text []byte) error {
 		return errors.New("can't unmarshal a nil *PrivacyProtocol")
 	}
 	switch strings.ToLower(string(text)) {
-	case "aes":
-		*p = PrivAES
 	case "des":
 		*p = PrivDES
+	case "aes", "aes-128":
+		*p = PrivAES
+	case "aes-192":
+		*p = PrivAES192
+	case "aes-256":
+		*p = PrivAES256
 	default:
 		return errors.Errorf("unsupported PrivacyProtocol: %s", string(text))
 	}

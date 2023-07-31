@@ -9,7 +9,11 @@ RUN chmod +x /trap2json
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC
 RUN apt-get update && \
-    apt-get install -y snmptrapd snmp-mibs-downloader tzdata ca-certificates snmp
+    apt-get install -y \
+    snmptrapd=5.9.1+* \
+    snmp=5.9.1+* \
+    snmp-mibs-downloader=1.5 \
+    tzdata ca-certificates
 RUN mkdir /etc/trap2json /etc/trap2json/mibs /var/run/snmptrapd /var/log/trap2json
 COPY --from=buildStage /trap2json /usr/local/bin/trap2json
 COPY entrypoint.sh .

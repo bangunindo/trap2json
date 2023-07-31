@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/Workiva/go-datastructures v1.1.0
-	github.com/antonmedv/expr v1.12.6
+	github.com/antonmedv/expr v1.12.7
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/essentialkaos/go-zabbix v1.1.3
 	github.com/go-sql-driver/mysql v1.7.1
@@ -13,7 +13,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
-	github.com/rs/zerolog v1.29.1
+	github.com/rs/zerolog v1.30.0
 	github.com/segmentio/kafka-go v0.4.42
 	github.com/sleepinggenius2/gosmi v0.4.4
 	github.com/spf13/viper v1.16.0
