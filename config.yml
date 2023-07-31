@@ -148,10 +148,10 @@ forwarders:
         username: traptest
         # set engine id to use
         engine_id: ""
-        # possible values: MD5, SHA
+        # possible values: MD5, SHA (alias for SHA-128), SHA-128, SHA-224, SHA-256, SHA-384, SHA-512
         auth_type: SHA
         auth_passphrase: testauth
-        # possible values: AES, DES
+        # possible values: DES, AES (alias for AES-128), AES-128, AES-192, AES-256
         privacy_protocol: AES
         privacy_passphrase: testpriv
       # for snmp v3. context name to use
