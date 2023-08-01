@@ -228,11 +228,11 @@ snmptrapd:
         # set engine id to be allowed for this user
         # required for snmptrap, not required for snmpinform
         engine_id: "0x8000000001020304"
-        # possible values: MD5, SHA
+        # possible values: MD5, SHA (alias for SHA-128), SHA-128, SHA-224, SHA-256, SHA-384, SHA-512
         auth_type: SHA
         # required
         auth_passphrase: testauth
-        # possible values: AES, DES
+        # possible values: DES, AES (alias for AES-128), AES-128, AES-192, AES-256
         privacy_protocol: AES
         # if this field is empty, it will use auth_passphrase field
         privacy_passphrase: testpriv
