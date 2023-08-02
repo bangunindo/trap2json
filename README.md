@@ -43,6 +43,10 @@ You might also want to adjust the timezone for better data readability
 ```shell
 docker run -e TZ=Asia/Jakarta -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
 ```
+Or if you want to pass extra arguments to snmptrapd
+```shell
+docker run -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest -Lf /var/log/trap2json/snmptrapd.log -Dusm
+```
 
 ## Zabbix Forwarder
 For zabbix forwarder to work, you need to create an item with Zabbix Trapper type and text/log data type. If you need
