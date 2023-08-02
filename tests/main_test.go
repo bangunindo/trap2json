@@ -67,7 +67,7 @@ var tfContainer = &ContainerInfo{
 var containers = []*ContainerInfo{
 	{
 		Container: tc.ContainerRequest{
-			Image:        "bitnami/kafka:3.5",
+			Image:        "bitnami/kafka:3.5.0",
 			Name:         "t2j-kafka",
 			ExposedPorts: []string{"9094:9094/tcp"},
 			Networks:     []string{networkName},
