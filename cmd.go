@@ -20,7 +20,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 )
 
 func GetSnmptrapDProcess() (*os.Process, error) {
@@ -42,23 +41,6 @@ func GetSnmptrapDProcess() (*os.Process, error) {
 		return nil, errors.Wrap(err, "can't find process")
 	}
 	return process, nil
-}
-
-func MonitorSnmptrapD(wg *sync.WaitGroup, ctx context.Context) {
-	defer wg.Done()
-	logger := log.With().Str("module", "snmptrapd_monitor").Logger()
-	for {
-		select {
-		case <-time.After(5 * time.Second):
-		case <-ctx.Done():
-			return
-		}
-		if _, err := GetSnmptrapDProcess(); err != nil {
-			logger.Fatal().
-				Err(err).
-				Msg("snmptrapd is not running")
-		}
-	}
 }
 
 func TerminateSnmptrapD() {
@@ -162,9 +144,6 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 			<-ctx.Done()
 			TerminateSnmptrapD()
 		}()
-		// is snmptrapd running?
-		topWg.Add(1)
-		go MonitorSnmptrapD(topWg, ctx)
 	}
 
 	parseChan := make(chan []byte)
@@ -213,5 +192,6 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	parseWg.Wait()
 	close(forwarderChan)
 	forwarderWg.Wait()
+	cancel()
 	topWg.Wait()
 }
