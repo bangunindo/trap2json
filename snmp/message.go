@@ -363,7 +363,7 @@ type MessageCompiled struct {
 	Description       *string         `expr:"description"`
 	TrapType          *int64          `expr:"trap_type"`
 	TrapSubType       *int64          `expr:"trap_sub_type"`
-	Values            []ValueCompiled `expr:"values"`
+	Values            []ValueCompiled `expr:"value_list"`
 }
 
 func prepareValues(val any) ([]map[string]any, error) {
