@@ -37,7 +37,7 @@ fn parse_snmp_packet(
                 if let v3::ScopedPduData::EncryptedPdu(ref payload) = message.scoped_data {
                     let pdu_data = usm::decrypt(
                         payload,
-                        usm::PrivacyCipher::AES128,
+                        usm::PrivacyCipher::AES256,
                         usm::AuthHash::SHA128,
                         b"sssssssss",
                         &res,
