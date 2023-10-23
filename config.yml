@@ -192,10 +192,10 @@ forwarders:
             address: 127.0.0.3
             port: 10051
 snmptrapd:
-  # default: "udp:10162", "udp6:10162"
+  # default: "0.0.0.0:10162", "[::]:10162"
   listening:
-    - "udp:10162"
-    - "udp6:10162"
+    - "0.0.0.0:10162"
+    - "[::]:10162"
   # magic_begin and magic_end will be used as a separator for each snmptrapd message
   # default: --TFWDBEGIN--
   magic_begin: --TFWDBEGIN--
