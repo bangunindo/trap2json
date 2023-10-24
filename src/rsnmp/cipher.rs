@@ -49,7 +49,7 @@ impl CipherType {
     pub fn key_bits(&self) -> usize {
         match self {
             Self::DES => 128,
-            Self::TDES => 168,
+            Self::TDES => 256,
             Self::AES128 => 128,
             Self::AES192 => 192,
             Self::AES192C => 192,
@@ -87,6 +87,18 @@ impl CipherType {
         iv
     }
 
+    fn des_iv(
+        &self,
+        pre_iv: &[u8],
+        priv_params: &[u8],
+    ) -> Vec<u8> {
+        priv_params
+            .iter()
+            .zip(pre_iv.iter())
+            .map(|(salt, pre_iv)| salt ^ pre_iv)
+            .collect()
+    }
+
     pub fn decrypt(
         &self,
         auth: AuthType,
@@ -107,11 +119,7 @@ impl CipherType {
             Self::DES => {
                 let des_key_len = 8;
                 let (des_key, pre_iv) = key.split_at(des_key_len);
-                let iv: Vec<_> = priv_params
-                    .iter()
-                    .zip(pre_iv.iter())
-                    .map(|(salt, pre_iv)| salt ^ pre_iv)
-                    .collect();
+                let iv = self.des_iv(pre_iv, priv_params);
                 let decryptor: cbcDecryptor<Des> = cbcDecryptor::new_from_slices(
                     des_key,
                     &iv,
@@ -119,7 +127,18 @@ impl CipherType {
                 decryptor.decrypt_padded_mut::<ZeroPadding>(payload)
                     .map_err(|_| anyhow::Error::msg("decrypt padding error"))?;
             }
-            Self::TDES => {}
+            // untested
+            Self::TDES => {
+                let des_key_len = 24;
+                let (des_key, pre_iv) = key.split_at(des_key_len);
+                let iv = self.des_iv(pre_iv, priv_params);
+                let decryptor: cbcDecryptor<TdesEde3> = cbcDecryptor::new_from_slices(
+                    des_key,
+                    &iv,
+                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                decryptor.decrypt_padded_mut::<ZeroPadding>(payload)
+                    .map_err(|_| anyhow::Error::msg("decrypt padding error"))?;
+            }
             Self::AES128 => {
                 let iv = self.aes_iv::<cfbDecryptor<Aes128>>(
                     engine_boots,
