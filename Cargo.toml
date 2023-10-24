@@ -13,8 +13,9 @@ cbc = "0.1.2"
 cfb-mode = "0.8.2"
 clap = { version = "4.4.6", features = ["derive"] }
 config = { version = "0.13.3", features = ["yaml"] }
+des = "0.8.1"
 log = { version = "0.4.20", features = ["serde", "kv_unstable"] }
-md5 = "0.7.0"
+md-5 = "0.10.6"
 num_cpus = "1.16.0"
 rasn = "0.10.5"
 rasn-mib = "0.10.5"

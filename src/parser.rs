@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use rasn::ber::{decode, encode};
 use rasn::Codec;
 use rasn_snmp::{v1, v2, v2c, v3};
-use crate::usm;
+use crate::rsnmp::{cipher, auth};
 
 fn parse_snmp_packet(
     data: Vec<u8>,
@@ -35,19 +35,26 @@ fn parse_snmp_packet(
                 println!("{:0x}", res.authoritative_engine_id);
                 println!("{:?}", res);
                 if let v3::ScopedPduData::EncryptedPdu(ref payload) = message.scoped_data {
-                    let pdu_data = usm::decrypt(
-                        payload,
-                        usm::PrivacyCipher::AES256,
-                        usm::AuthHash::SHA128,
+                    let cipher_algo = cipher::CipherType::AES128;
+                    let hash_algo = auth::AuthType::SHA128;
+                    let mut payload = payload.clone().to_vec();
+                    let pdu_data = cipher_algo.decrypt(
+                        hash_algo,
+                        &mut payload,
                         b"sssssssss",
-                        &res,
+                        res.authoritative_engine_boots.to_u32_digits().1[0],
+                        res.authoritative_engine_time.to_u32_digits().1[0],
+                        &res.authoritative_engine_id,
+                        &res.privacy_parameters,
                     );
                     match pdu_data {
                         Err(e) => {
                             println!("{}", e);
                         }
-                        Ok(t) => {
-                            message.scoped_data = v3::ScopedPduData::CleartextPdu(t);
+                        Ok(_) => {
+                            if let Ok(pdu) = decode::<v3::ScopedPdu>(&payload) {
+                                message.scoped_data = v3::ScopedPduData::CleartextPdu(pdu);
+                            }
                         }
                     }
                 }
