@@ -9,7 +9,7 @@ edition = "2021"
 aes = "0.8.3"
 anyhow = "1.0.75"
 async-channel = "1.9.0"
-cbc = "0.1.2"
+cbc = {version = "0.1.2", features = ["block-padding"]}
 cfb-mode = "0.8.2"
 clap = { version = "4.4.6", features = ["derive"] }
 config = { version = "0.13.3", features = ["yaml"] }

@@ -1,8 +1,11 @@
 use serde_enum_str::Deserialize_enum_str;
 use std::fmt::Formatter;
-use cfb_mode::Decryptor;
+use cfb_mode::Decryptor as cfbDecryptor;
+use cbc::Decryptor as cbcDecryptor;
 use aes::cipher::{AsyncStreamCipher, IvSizeUser, KeyIvInit};
 use aes::{Aes128, Aes192, Aes256};
+use cbc::cipher::BlockDecryptMut;
+use cbc::cipher::block_padding::ZeroPadding;
 use des::{Des, TdesEde3};
 use super::auth::AuthType;
 
@@ -101,41 +104,57 @@ impl CipherType {
             self.key_len(),
         );
         match self {
-            Self::DES => {}
+            Self::DES => {
+                let des_key_len = 8;
+                let (des_key, pre_iv) = key.split_at(des_key_len);
+                let iv: Vec<_> = priv_params
+                    .iter()
+                    .zip(pre_iv.iter())
+                    .map(|(salt, pre_iv)| salt ^ pre_iv)
+                    .collect();
+                let decryptor: cbcDecryptor<Des> = cbcDecryptor::new_from_slices(
+                    des_key,
+                    &iv,
+                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                decryptor.decrypt_padded_mut::<ZeroPadding>(payload)
+                    .map_err(|_| anyhow::Error::msg("decrypt padding error"))?;
+            }
             Self::TDES => {}
             Self::AES128 => {
-                let iv = self.aes_iv::<Decryptor<Aes128>>(
+                let iv = self.aes_iv::<cfbDecryptor<Aes128>>(
                     engine_boots,
                     engine_time,
                     priv_params,
                 );
-                let decryptor: Decryptor<Aes128> = Decryptor::new_from_slices(
+                let decryptor: cfbDecryptor<Aes128> = cfbDecryptor::new_from_slices(
                     &key,
                     &iv,
-                ).map_err(|_| anyhow::Error::msg("decrypt error"))?;
-                decryptor.decrypt( payload);
+                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                decryptor.decrypt(payload);
             }
             Self::AES192 | Self::AES192C => {
-                let decryptor: Decryptor<Aes192> = Decryptor::new_from_slices(
+                let iv = self.aes_iv::<cfbDecryptor<Aes192>>(
+                    engine_boots,
+                    engine_time,
+                    priv_params,
+                );
+                let decryptor: cfbDecryptor<Aes192> = cfbDecryptor::new_from_slices(
                     &key,
-                    &self.aes_iv::<Decryptor<Aes192>>(
-                        engine_boots,
-                        engine_time,
-                        priv_params,
-                    ),
-                ).map_err(|_| anyhow::Error::msg("decrypt error"))?;
-                decryptor.decrypt( payload);
+                    &iv,
+                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                decryptor.decrypt(payload);
             }
             Self::AES256 | Self::AES256C => {
-                let decryptor: Decryptor<Aes256> = Decryptor::new_from_slices(
+                let iv = self.aes_iv::<cfbDecryptor<Aes256>>(
+                    engine_boots,
+                    engine_time,
+                    priv_params,
+                );
+                let decryptor: cfbDecryptor<Aes256> = cfbDecryptor::new_from_slices(
                     &key,
-                    &self.aes_iv::<Decryptor<Aes256>>(
-                        engine_boots,
-                        engine_time,
-                        priv_params,
-                    ),
-                ).map_err(|_| anyhow::Error::msg("decrypt error"))?;
-                decryptor.decrypt( payload);
+                    &iv,
+                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                decryptor.decrypt(payload);
             }
         }
         Ok(())

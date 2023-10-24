@@ -35,8 +35,8 @@ fn parse_snmp_packet(
                 println!("{:0x}", res.authoritative_engine_id);
                 println!("{:?}", res);
                 if let v3::ScopedPduData::EncryptedPdu(ref payload) = message.scoped_data {
-                    let cipher_algo = cipher::CipherType::AES128;
-                    let hash_algo = auth::AuthType::SHA128;
+                    let cipher_algo = cipher::CipherType::DES;
+                    let hash_algo = auth::AuthType::MD5;
                     let mut payload = payload.clone().to_vec();
                     let pdu_data = cipher_algo.decrypt(
                         hash_algo,
