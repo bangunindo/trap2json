@@ -1,6 +1,7 @@
 use serde_enum_str::Deserialize_enum_str;
 use std::fmt::Formatter;
 use sha1::digest::DynDigest;
+use hmac::{Mac, Hmac};
 use super::cipher::KeyExtension;
 
 const ONE_MEGABYTE: usize = 1_048_576;
@@ -47,8 +48,23 @@ impl AuthType {
         }
     }
 
+    pub fn hmac_key_bits(&self) -> usize {
+        match self {
+            Self::MD5 => 96,
+            Self::SHA128 => 96,
+            Self::SHA224 => 128,
+            Self::SHA256 => 192,
+            Self::SHA384 => 256,
+            Self::SHA512 => 384,
+        }
+    }
+
     pub fn key_len(&self) -> usize {
         self.key_bits() / 8
+    }
+
+    pub fn hmac_key_len(&self) -> usize {
+        self.hmac_key_bits() / 8
     }
 
     pub fn hasher(&self) -> Box<dyn DynDigest> {
@@ -59,6 +75,17 @@ impl AuthType {
             Self::SHA256 => Box::new(sha2::Sha256::default()),
             Self::SHA384 => Box::new(sha2::Sha384::default()),
             Self::SHA512 => Box::new(sha2::Sha512::default()),
+        }
+    }
+
+    pub fn hmac_hasher(&self, key: &[u8]) -> Box<dyn DynDigest> {
+        match self {
+            Self::MD5 => Box::new(Hmac::<md5::Md5>::new_from_slice(key).unwrap()),
+            Self::SHA128 => Box::new(Hmac::<sha1::Sha1>::new_from_slice(key).unwrap()),
+            Self::SHA224 => Box::new(Hmac::<sha2::Sha224>::new_from_slice(key).unwrap()),
+            Self::SHA256 => Box::new(Hmac::<sha2::Sha256>::new_from_slice(key).unwrap()),
+            Self::SHA384 => Box::new(Hmac::<sha2::Sha384>::new_from_slice(key).unwrap()),
+            Self::SHA512 => Box::new(Hmac::<sha2::Sha512>::new_from_slice(key).unwrap()),
         }
     }
 
@@ -123,5 +150,24 @@ impl AuthType {
             key.extend_from_slice(&prev_res);
         }
         key[..key_len].to_vec()
+    }
+
+    pub fn auth_msg_in(
+        &self,
+        payload: &[u8],
+        password: &[u8],
+        engine_boots: u32,
+        engine_time: u32,
+        engine_id: &[u8],
+        auth_params: &[u8],
+    ) -> Result<(), anyhow::Error> {
+        let key = self.gen_key_iter(password, engine_id);
+        let mut hasher = self.hmac_hasher(&key);
+        hasher.update(payload);
+        let hash_val = hasher.finalize();
+        if hash_val[..self.hmac_key_len()] != *auth_params {
+            return Err(anyhow::Error::msg("invalid auth"));
+        }
+        Ok(())
     }
 }

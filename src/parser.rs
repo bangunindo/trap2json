@@ -2,8 +2,11 @@ use anyhow::Error;
 use async_channel::{Receiver, RecvError};
 use tokio::sync::mpsc::UnboundedSender;
 use std::net::SocketAddr;
-use rasn::ber::{decode, encode};
-use rasn::Codec;
+use rasn::{
+    Codec,
+    types::OctetString,
+    ber::{decode, encode},
+};
 use rasn_snmp::{v1, v2, v2c, v3};
 use crate::rsnmp::{cipher, auth};
 
@@ -34,9 +37,34 @@ fn parse_snmp_packet(
             Ok(res) => {
                 println!("{:0x}", res.authoritative_engine_id);
                 println!("{:?}", res);
+                let cipher_algo = cipher::CipherType::AES256;
+                let hash_algo = auth::AuthType::SHA512;
+                if res.authentication_parameters.len() > 0 {
+                    let mut resp = message.clone();
+                    resp.encode_security_parameters(
+                        Codec::Ber,
+                        &v3::USMSecurityParameters {
+                            authoritative_engine_id: res.authoritative_engine_id.clone(),
+                            authoritative_engine_boots: res.authoritative_engine_boots.clone(),
+                            authoritative_engine_time: res.authoritative_engine_time.clone(),
+                            user_name: res.user_name.clone(),
+                            authentication_parameters: OctetString::from(vec![0u8; res.authentication_parameters.len()]),
+                            privacy_parameters: res.privacy_parameters.clone(),
+                        },
+                    )
+                        .map_err(|_| anyhow::Error::msg("encode error"))
+                        .unwrap();
+                    let payload = encode(&resp).unwrap();
+                    let t = hash_algo.auth_msg_in(
+                        &payload,
+                        b"sssssssss",
+                        0,
+                        0,
+                        &res.authoritative_engine_id,
+                        &res.authentication_parameters,
+                    );
+                }
                 if let v3::ScopedPduData::EncryptedPdu(ref payload) = message.scoped_data {
-                    let cipher_algo = cipher::CipherType::DES;
-                    let hash_algo = auth::AuthType::MD5;
                     let mut payload = payload.clone().to_vec();
                     let pdu_data = cipher_algo.decrypt(
                         hash_algo,

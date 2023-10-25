@@ -14,6 +14,7 @@ cfb-mode = "0.8.2"
 clap = { version = "4.4.6", features = ["derive"] }
 config = { version = "0.13.3", features = ["yaml"] }
 des = "0.8.1"
+hmac = {version = "0.12.1", features = ["reset"]}
 log = { version = "0.4.20", features = ["serde", "kv_unstable"] }
 md-5 = "0.10.6"
 num_cpus = "1.16.0"
