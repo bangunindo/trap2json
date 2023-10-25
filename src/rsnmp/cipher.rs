@@ -7,7 +7,7 @@ use aes::{Aes128, Aes192, Aes256};
 use cbc::cipher::BlockDecryptMut;
 use cbc::cipher::block_padding::ZeroPadding;
 use des::{Des, TdesEde3};
-use super::auth::AuthType;
+use super::{auth::AuthType, error::Error};
 
 pub enum KeyExtension {
     Reeder,
@@ -108,7 +108,7 @@ impl CipherType {
         engine_time: u32,
         engine_id: &[u8],
         priv_params: &[u8],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), Error> {
         let key = auth.gen_key(
             password,
             engine_id,
@@ -123,9 +123,9 @@ impl CipherType {
                 let decryptor: cbcDecryptor<Des> = cbcDecryptor::new_from_slices(
                     des_key,
                     &iv,
-                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                ).unwrap();
                 decryptor.decrypt_padded_mut::<ZeroPadding>(payload)
-                    .map_err(|_| anyhow::Error::msg("decrypt padding error"))?;
+                    .map_err(|_| Error::CipherDESUnpadError)?;
             }
             // untested
             Self::TDES => {
@@ -135,9 +135,9 @@ impl CipherType {
                 let decryptor: cbcDecryptor<TdesEde3> = cbcDecryptor::new_from_slices(
                     des_key,
                     &iv,
-                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                ).unwrap();
                 decryptor.decrypt_padded_mut::<ZeroPadding>(payload)
-                    .map_err(|_| anyhow::Error::msg("decrypt padding error"))?;
+                    .map_err(|_| Error::CipherDESUnpadError)?;
             }
             Self::AES128 => {
                 let iv = self.aes_iv::<cfbDecryptor<Aes128>>(
@@ -148,7 +148,7 @@ impl CipherType {
                 let decryptor: cfbDecryptor<Aes128> = cfbDecryptor::new_from_slices(
                     &key,
                     &iv,
-                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                ).unwrap();
                 decryptor.decrypt(payload);
             }
             Self::AES192 | Self::AES192C => {
@@ -160,7 +160,7 @@ impl CipherType {
                 let decryptor: cfbDecryptor<Aes192> = cfbDecryptor::new_from_slices(
                     &key,
                     &iv,
-                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                ).unwrap();
                 decryptor.decrypt(payload);
             }
             Self::AES256 | Self::AES256C => {
@@ -172,7 +172,7 @@ impl CipherType {
                 let decryptor: cfbDecryptor<Aes256> = cfbDecryptor::new_from_slices(
                     &key,
                     &iv,
-                ).map_err(|_| anyhow::Error::msg("decrypt length error"))?;
+                ).unwrap();
                 decryptor.decrypt(payload);
             }
         }

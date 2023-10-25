@@ -55,11 +55,9 @@ fn parse_snmp_packet(
                         .map_err(|_| anyhow::Error::msg("encode error"))
                         .unwrap();
                     let payload = encode(&resp).unwrap();
-                    let t = hash_algo.auth_msg_in(
+                    let t = hash_algo.integrity_check(
                         &payload,
                         b"sssssssss",
-                        0,
-                        0,
                         &res.authoritative_engine_id,
                         &res.authentication_parameters,
                     );
@@ -81,6 +79,7 @@ fn parse_snmp_packet(
                         }
                         Ok(_) => {
                             if let Ok(pdu) = decode::<v3::ScopedPdu>(&payload) {
+                                println!("{:0x}", &pdu.engine_id);
                                 message.scoped_data = v3::ScopedPduData::CleartextPdu(pdu);
                             }
                         }

@@ -1,11 +1,24 @@
 use serde_enum_str::Deserialize_enum_str;
 use std::fmt::Formatter;
+use std::time::{Duration, SystemTime};
 use sha1::digest::DynDigest;
 use hmac::{Mac, Hmac};
-use super::cipher::KeyExtension;
+use lazy_static::lazy_static;
+use super::{
+    cipher::KeyExtension,
+    error::Error,
+    cache::{AuthKey, LocalEngine, AUTH_KEY_CACHE, AUTH_ENGINE_CACHE},
+};
 
 const ONE_MEGABYTE: usize = 1_048_576;
 const PASSWD_BUF_LEN: usize = 64;
+const TIME_WINDOW: Duration = Duration::from_secs(150);
+const ENGINE_BOOTS_MAX: u32 = 2_147_483_647;
+const ENGINE_TIME_MAX: u32 = 2_147_483_647;
+
+lazy_static!(
+    static ref FIRST_BOOT: SystemTime = SystemTime::now();
+);
 
 #[derive(Deserialize_enum_str, Clone, Copy, Debug)]
 pub enum AuthType {
@@ -37,7 +50,7 @@ impl std::fmt::Display for AuthType {
 
 
 impl AuthType {
-    pub fn key_bits(&self) -> usize {
+    fn key_bits(&self) -> usize {
         match self {
             Self::MD5 => 128,
             Self::SHA128 => 128,
@@ -48,7 +61,7 @@ impl AuthType {
         }
     }
 
-    pub fn hmac_key_bits(&self) -> usize {
+    fn hmac_key_bits(&self) -> usize {
         match self {
             Self::MD5 => 96,
             Self::SHA128 => 96,
@@ -59,15 +72,15 @@ impl AuthType {
         }
     }
 
-    pub fn key_len(&self) -> usize {
+    fn key_len(&self) -> usize {
         self.key_bits() / 8
     }
 
-    pub fn hmac_key_len(&self) -> usize {
+    fn hmac_key_len(&self) -> usize {
         self.hmac_key_bits() / 8
     }
 
-    pub fn hasher(&self) -> Box<dyn DynDigest> {
+    fn hasher(&self) -> Box<dyn DynDigest> {
         match self {
             Self::MD5 => Box::new(md5::Md5::default()),
             Self::SHA128 => Box::new(sha1::Sha1::default()),
@@ -78,7 +91,7 @@ impl AuthType {
         }
     }
 
-    pub fn hmac_hasher(&self, key: &[u8]) -> Box<dyn DynDigest> {
+    fn hmac_hasher(&self, key: &[u8]) -> Box<dyn DynDigest> {
         match self {
             Self::MD5 => Box::new(Hmac::<md5::Md5>::new_from_slice(key).unwrap()),
             Self::SHA128 => Box::new(Hmac::<sha1::Sha1>::new_from_slice(key).unwrap()),
@@ -94,6 +107,15 @@ impl AuthType {
         password: &[u8],
         engine_id: &[u8],
     ) -> Vec<u8> {
+        let auth_key = AuthKey {
+            password: password.to_vec(),
+            engine_id: engine_id.to_vec(),
+        };
+        let cache_res = AUTH_KEY_CACHE.get(&auth_key);
+        if let Some(res) = cache_res {
+            return res;
+        }
+
         let mut passwd_buf = vec![0; PASSWD_BUF_LEN];
         let mut passwd_index = 0;
         let passwd_len = password.len();
@@ -115,7 +137,9 @@ impl AuthType {
         passwd_buf.extend_from_slice(&key);
 
         hasher.update(&passwd_buf);
-        hasher.finalize().to_vec()
+        let res = hasher.finalize().to_vec();
+        AUTH_KEY_CACHE.insert(auth_key, res.clone());
+        res
     }
 
     pub fn gen_key(
@@ -152,21 +176,44 @@ impl AuthType {
         key[..key_len].to_vec()
     }
 
-    pub fn auth_msg_in(
+    pub fn timeliness_check(
         &self,
-        payload: &[u8],
-        password: &[u8],
         engine_boots: u32,
         engine_time: u32,
         engine_id: &[u8],
+    ) -> Result<(), Error> {
+        if engine_boots >= ENGINE_BOOTS_MAX {
+            return Err(Error::NotInTimeWindowError);
+        }
+        let local_engine = AUTH_ENGINE_CACHE.get(engine_id);
+        if let Some(l) = local_engine {
+            todo!();
+        }
+        let new_local_engine = LocalEngine{
+            engine_boots,
+            engine_time,
+            last_access: SystemTime::now(),
+        };
+        AUTH_ENGINE_CACHE.insert(engine_id.to_vec(), new_local_engine);
+        Ok(())
+    }
+
+    pub fn integrity_check(
+        &self,
+        payload: &[u8],
+        password: &[u8],
+        engine_id: &[u8],
         auth_params: &[u8],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), Error> {
+        if auth_params.len() != self.hmac_key_len() {
+            return Err(Error::AuthenticationError);
+        }
         let key = self.gen_key_iter(password, engine_id);
         let mut hasher = self.hmac_hasher(&key);
         hasher.update(payload);
         let hash_val = hasher.finalize();
         if hash_val[..self.hmac_key_len()] != *auth_params {
-            return Err(anyhow::Error::msg("invalid auth"));
+            return Err(Error::AuthenticationFailure);
         }
         Ok(())
     }

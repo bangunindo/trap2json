@@ -196,14 +196,6 @@ snmptrapd:
   listening:
     - "0.0.0.0:10162"
     - "[::]:10162"
-  # magic_begin and magic_end will be used as a separator for each snmptrapd message
-  # default: --TFWDBEGIN--
-  magic_begin: --TFWDBEGIN--
-  # default: --TFWDEND--
-  magic_end: --TFWDEND--
-  additional_config: |
-    # WARNING: you have to know what you're doing, as it might break the application
-    # you can add additional config for snmptrapd.conf here, for example, adding tls/dtls connection config
   auth:
     # if this is disabled:
     # - any v1/v2c community will work

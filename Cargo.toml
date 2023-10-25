@@ -8,15 +8,17 @@ edition = "2021"
 [dependencies]
 aes = "0.8.3"
 anyhow = "1.0.75"
-async-channel = "1.9.0"
-cbc = {version = "0.1.2", features = ["block-padding"]}
+async-channel = "2.0.0"
+cbc = { version = "0.1.2", features = ["block-padding"] }
 cfb-mode = "0.8.2"
 clap = { version = "4.4.6", features = ["derive"] }
 config = { version = "0.13.3", features = ["yaml"] }
 des = "0.8.1"
-hmac = {version = "0.12.1", features = ["reset"]}
+hmac = { version = "0.12.1", features = ["reset"] }
+lazy_static = "1.4.0"
 log = { version = "0.4.20", features = ["serde", "kv_unstable"] }
 md-5 = "0.10.6"
+moka = { version = "0.12.1" , features = ["sync"]}
 num_cpus = "1.16.0"
 rasn = "0.10.5"
 rasn-mib = "0.10.5"
