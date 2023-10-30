@@ -61,6 +61,11 @@ fn parse_snmp_packet(
                         &res.authoritative_engine_id,
                         &res.authentication_parameters,
                     );
+                    let u = hash_algo.timeliness_check(
+                        res.authoritative_engine_boots.to_u32_digits().1[0],
+                        res.authoritative_engine_time.to_u32_digits().1[0] as u64,
+                        &res.authoritative_engine_id,
+                    );
                 }
                 if let v3::ScopedPduData::EncryptedPdu(ref payload) = message.scoped_data {
                     let mut payload = payload.clone().to_vec();

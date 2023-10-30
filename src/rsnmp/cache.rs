@@ -18,7 +18,7 @@ lazy_static!(
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct LocalEngine {
     pub engine_boots: u32,
-    pub engine_time: u32,
+    pub engine_time: Duration,
     pub last_access: SystemTime,
 }
 

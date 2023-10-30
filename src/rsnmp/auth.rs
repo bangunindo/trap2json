@@ -12,9 +12,9 @@ use super::{
 
 const ONE_MEGABYTE: usize = 1_048_576;
 const PASSWD_BUF_LEN: usize = 64;
-const TIME_WINDOW: Duration = Duration::from_secs(150);
+const TIME_WINDOW: u64 = 150;
 const ENGINE_BOOTS_MAX: u32 = 2_147_483_647;
-const ENGINE_TIME_MAX: u32 = 2_147_483_647;
+const ENGINE_TIME_MAX: u64 = 2_147_483_647;
 
 lazy_static!(
     static ref FIRST_BOOT: SystemTime = SystemTime::now();
@@ -179,20 +179,38 @@ impl AuthType {
     pub fn timeliness_check(
         &self,
         engine_boots: u32,
-        engine_time: u32,
+        engine_time: u64,
         engine_id: &[u8],
     ) -> Result<(), Error> {
-        if engine_boots >= ENGINE_BOOTS_MAX {
+        if engine_boots >= ENGINE_BOOTS_MAX || engine_time >= ENGINE_TIME_MAX {
             return Err(Error::NotInTimeWindowError);
         }
         let local_engine = AUTH_ENGINE_CACHE.get(engine_id);
+        let now = SystemTime::now();
         if let Some(l) = local_engine {
-            todo!();
+            if engine_boots < l.engine_boots {
+                return Err(Error::NotInTimeWindowError);
+            }
+            if engine_boots == l.engine_boots {
+                let dur_res = now.duration_since(l.last_access);
+                match dur_res {
+                    Ok(dur) => {
+                        if (l.engine_time + dur)
+                            .as_secs()
+                            .abs_diff(engine_time) > TIME_WINDOW {
+                            return Err(Error::NotInTimeWindowError);
+                        }
+                    }
+                    Err(_) => {
+                        return Err(Error::NotInTimeWindowError);
+                    }
+                }
+            }
         }
-        let new_local_engine = LocalEngine{
+        let new_local_engine = LocalEngine {
             engine_boots,
-            engine_time,
-            last_access: SystemTime::now(),
+            engine_time: Duration::from_secs(engine_time),
+            last_access: now,
         };
         AUTH_ENGINE_CACHE.insert(engine_id.to_vec(), new_local_engine);
         Ok(())
