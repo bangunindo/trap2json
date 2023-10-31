@@ -182,7 +182,7 @@ impl Settings {
             Some(cnf) => {
                 let file = File::open(cnf)?;
                 let reader = BufReader::new(file);
-                let r: Self = serde_yaml::from_reader(reader)?;
+                let r = serde_yaml::from_reader(reader)?;
                 Ok(r)
             },
             None => Ok(Default::default())
