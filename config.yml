@@ -224,7 +224,7 @@ snmptrapd:
         auth_type: SHA
         # required
         auth_passphrase: testauth
-        # possible values: DES, AES (alias for AES-128), AES-128, AES-192, AES-256
+        # possible values: DES, 3DES, AES (alias for AES-128), AES-128, AES-192, AES-192C, AES-256, AES-256C
         privacy_protocol: AES
         # if this field is empty, it will use auth_passphrase field
         privacy_passphrase: testpriv
