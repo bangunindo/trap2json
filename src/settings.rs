@@ -1,5 +1,5 @@
 use std::fmt::Formatter;
-use serde::Deserialize;
+use serde::{Deserialize, de};
 use serde_enum_str::Deserialize_enum_str;
 use clap::Parser;
 use std::default::Default;
@@ -89,22 +89,42 @@ pub struct User {
     pub no_auth: bool,
     #[serde(default = "bool::default")]
     pub require_privacy: bool,
-    #[serde(with = "hex::serde")]
-    pub engine_id: Vec<u8>,
+    #[validate(length(min = 5, max = 32))]
+    #[serde(default, deserialize_with = "deserialize_engineid")]
+    pub engine_id: Option<Vec<u8>>,
     pub auth_type: Option<auth::AuthType>,
     #[validate(length(min = 8))]
     pub auth_passphrase: Option<String>,
     pub privacy_protocol: Option<cipher::CipherType>,
     #[validate(length(min = 8))]
     pub privacy_passphrase: Option<String>,
+    #[serde(default = "bool::default")]
+    pub skip_timeliness_checks: bool,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+fn deserialize_engineid<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+    where D: de::Deserializer<'de>
+{
+    let s: String = de::Deserialize::deserialize(deserializer)?;
+    if s.starts_with("0x") {
+        let res = hex::decode(&s[2..]).map_err(|e| de::Error::custom("incorrect engine_id ".to_string()+&e.to_string()));
+        match res {
+            Ok(data) => Ok(Some(data)),
+            Err(e) => Err(e),
+        }
+    } else {
+        Ok(Some(s.as_bytes().to_vec()))
+    }
+}
+
+#[derive(Deserialize, Validate, Clone, Debug)]
 pub struct Auth {
     #[serde(default = "bool::default")]
     pub enable: bool,
+    #[validate]
     #[serde(default = "Vec::new")]
     pub community: Vec<Community>,
+    #[validate]
     #[serde(default = "Vec::new")]
     pub user: Vec<User>,
 }
@@ -119,10 +139,11 @@ impl Default for Auth {
     }
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Validate, Clone, Debug)]
 pub struct TrapdConfig {
     #[serde(default = "default_listening")]
     pub listening: Vec<String>,
+    #[validate]
     #[serde(default)]
     pub auth: Auth,
 }
@@ -143,12 +164,13 @@ fn default_listening() -> Vec<String> {
     ]
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Validate, Clone, Debug)]
 pub struct Settings {
     #[serde(default)]
     pub logger: Logger,
     #[serde(default = "default_num_cpus")]
     pub parse_workers: u64,
+    #[validate]
     #[serde(default)]
     pub snmptrapd: TrapdConfig,
 }
@@ -182,9 +204,10 @@ impl Settings {
             Some(cnf) => {
                 let file = File::open(cnf)?;
                 let reader = BufReader::new(file);
-                let r = serde_yaml::from_reader(reader)?;
+                let r: Settings = serde_yaml::from_reader(reader)?;
+                r.validate()?;
                 Ok(r)
-            },
+            }
             None => Ok(Default::default())
         }
     }

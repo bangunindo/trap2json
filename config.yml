@@ -218,7 +218,6 @@ snmptrapd:
         # no_auth config will be ignored if this is set to true
         require_privacy: false
         # set engine id to be allowed for this user
-        # required for snmptrap, not required for snmpinform
         engine_id: "0x8000000001020304"
         # possible values: MD5, SHA (alias for SHA-128), SHA-128, SHA-224, SHA-256, SHA-384, SHA-512
         auth_type: SHA
@@ -228,3 +227,6 @@ snmptrapd:
         privacy_protocol: AES
         # if this field is empty, it will use auth_passphrase field
         privacy_passphrase: testpriv
+        # if set to true, engine time doesn't have to be monotonically increasing. however this will
+        # make you susceptible to replay attack
+        skip_timeliness_checks: false
