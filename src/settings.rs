@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Formatter;
 use serde::{Deserialize, de};
 use serde_enum_str::Deserialize_enum_str;
@@ -127,6 +128,8 @@ pub struct Auth {
     #[validate]
     #[serde(default = "Vec::new")]
     pub user: Vec<User>,
+    #[serde(skip, default = "HashMap::new")]
+    user_map: HashMap<String, User>,
 }
 
 impl Default for Auth {
@@ -135,7 +138,19 @@ impl Default for Auth {
             enable: false,
             community: vec![],
             user: vec![],
+            user_map: HashMap::new(),
         }
+    }
+}
+
+impl Auth {
+    fn build_user_map(&mut self) {
+        for user in self.user.iter() {
+            self.user_map.insert(user.username.clone(), user.clone());
+        }
+    }
+    pub fn get_user(&self, username: &str) -> Option<&User> {
+        self.user_map.get(username)
     }
 }
 
@@ -200,15 +215,19 @@ struct Args {
 impl Settings {
     pub fn new() -> Result<Self, anyhow::Error> {
         let args = Args::parse();
+        let mut r: Self;
         match args.config {
             Some(cnf) => {
                 let file = File::open(cnf)?;
                 let reader = BufReader::new(file);
-                let r: Settings = serde_yaml::from_reader(reader)?;
-                r.validate()?;
-                Ok(r)
+                r = serde_yaml::from_reader(reader)?;
             }
-            None => Ok(Default::default())
+            None => {
+                r = Self::default();
+            }
         }
+        r.validate()?;
+        r.snmptrapd.auth.build_user_map();
+        Ok(r)
     }
 }
