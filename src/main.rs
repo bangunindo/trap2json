@@ -7,7 +7,9 @@ use tokio::{
     sync::mpsc,
 };
 use structured_logger::{async_json::new_writer, Builder};
+use simple_logger::SimpleLogger;
 use std::net::SocketAddr;
+use std::str::FromStr;
 
 mod parser;
 mod settings;
@@ -16,15 +18,25 @@ mod rsnmp;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let settings = settings::Settings::new()?;
-    Builder::with_level(settings.logger.level.to_string().as_str())
-        .with_target_writer("*", new_writer(io::stderr()))
-        .init();
+    let config = settings::Settings::new()?;
+    match config.logger.format {
+        settings::LogFormat::Console => {
+            SimpleLogger::new()
+                .with_level(log::LevelFilter::from_str(&config.logger.level.to_string())?)
+                .init()
+                .unwrap();
+        },
+        settings::LogFormat::Json => {
+            Builder::with_level(&config.logger.level.to_string())
+                .with_target_writer("*", new_writer(io::stderr()))
+                .init();
+        },
+    }
 
     let mut socket_handlers = vec![];
     let mut informs = vec![];
     let (s, r) = async_channel::unbounded();
-    for (idx, addr) in settings.snmptrapd.listening.iter().enumerate() {
+    for (idx, addr) in config.snmptrapd.listening.iter().enumerate() {
         let socket = UdpSocket::bind(addr).await?;
         let mut buf = vec![0u8; 4096];
         let s = s.clone();
@@ -56,7 +68,7 @@ async fn main() -> Result<(), Error> {
     }
 
     let mut worker_handlers = vec![];
-    for _ in 0..settings.parse_workers {
+    for _ in 0..config.parse_workers {
         let r = r.clone();
         let informs = informs.clone();
         let handle = spawn(async move {

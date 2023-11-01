@@ -18,18 +18,19 @@ hmac = { version = "0.12.1", features = ["reset"] }
 lazy_static = "1.4.0"
 log = { version = "0.4.20", features = ["serde", "kv_unstable"] }
 md-5 = "0.10.6"
-moka = { version = "0.12.1" , features = ["sync"]}
+moka = { version = "0.12.1", features = ["sync"] }
 num_cpus = "1.16.0"
 rasn = "0.11.0"
 rasn-mib = "0.11.0"
 rasn-smi = "0.11.0"
 rasn-snmp = "0.11.0"
 rayon = "1.8.0"
-serde = { version = "1.0.189", features = ["derive"] }
+serde = { version = "1.0.190", features = ["derive"] }
 serde-enum-str = "0.4.0"
 serde_yaml = "0.9.27"
 sha1 = "0.10.6"
 sha2 = "0.10.8"
+simple_logger = { version = "4.2.0", features = ["stderr"] }
 structured-logger = "1.0.3"
 tokio = { version = "1.33.0", features = ["full"] }
-validator = {version = "0.16.1", features = ["derive"]}
+validator = { version = "0.16.1", features = ["derive"] }
