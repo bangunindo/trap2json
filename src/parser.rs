@@ -2,6 +2,7 @@ use anyhow::Error;
 use async_channel::{Receiver, RecvError};
 use tokio::sync::mpsc::UnboundedSender;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use rasn::{
     Codec,
     types::OctetString,
@@ -9,6 +10,7 @@ use rasn::{
 };
 use rasn_snmp::{v1, v2, v2c, v3};
 use crate::rsnmp::{cipher, auth};
+use crate::settings;
 
 fn parse_snmp_packet(
     data: Vec<u8>,
@@ -106,6 +108,7 @@ fn parse_snmp_packet(
 pub async fn parse_worker(
     r: Receiver<(Vec<u8>, SocketAddr, usize)>,
     informs: Vec<UnboundedSender<(Vec<u8>, SocketAddr)>>,
+    config: Arc<settings::Settings>,
 ) -> Result<(), Error> {
     loop {
         match r.recv().await {
@@ -124,7 +127,7 @@ pub async fn parse_worker(
                 }
             }
             Err(RecvError) => {
-                log::debug!(target = "parse_worker"; "worker shutdown");
+                log::debug!(target = "parseworker"; "worker shutdown");
                 return Ok(());
             }
         }

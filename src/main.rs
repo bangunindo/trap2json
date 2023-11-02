@@ -10,6 +10,8 @@ use structured_logger::{async_json::new_writer, Builder};
 use simple_logger::SimpleLogger;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 
 mod parser;
 mod settings;
@@ -18,7 +20,7 @@ mod rsnmp;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let config = settings::Settings::new()?;
+    let config = Arc::new(settings::Settings::new()?);
     match config.logger.format {
         settings::LogFormat::Console => {
             SimpleLogger::new()
@@ -71,8 +73,9 @@ async fn main() -> Result<(), Error> {
     for _ in 0..config.parse_workers {
         let r = r.clone();
         let informs = informs.clone();
+        let conf_clone = config.clone();
         let handle = spawn(async move {
-            parser::parse_worker(r, informs).await.unwrap();
+            parser::parse_worker(r, informs, conf_clone).await.unwrap();
             Ok(()) as Result<(), Error>
         });
         worker_handlers.push(handle);
@@ -86,5 +89,7 @@ async fn main() -> Result<(), Error> {
     for handle in worker_handlers {
         let _ = handle.await?;
     }
+    let _ = io::stderr().flush().await?;
+    log::info!(target: "main", "application shutdown");
     Ok(())
 }

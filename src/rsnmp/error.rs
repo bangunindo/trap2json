@@ -6,6 +6,14 @@ pub enum Error {
     AuthenticationFailure,
     NotInTimeWindowError,
     CipherDESUnpadError,
+    ASNDecodeError,
+    ASNEncodeError,
+    USMParamDecodeError,
+    USMParamEncodeError,
+    UnknownSNMPVersion,
+    InvalidV3Flags,
+    InvalidSecurityLevel,
+    DecryptionFailure,
 }
 
 impl Display for Error {
@@ -15,6 +23,14 @@ impl Display for Error {
             Self::AuthenticationFailure => write!(f, "auth doesn't match"),
             Self::NotInTimeWindowError => write!(f, "engine time/boot is not incremented"),
             Self::CipherDESUnpadError => write!(f, "des cipher text is not zero padded"),
+            Self::ASNDecodeError => write!(f, "failed decoding packet"),
+            Self::ASNEncodeError => write!(f, "failed encoding packet"),
+            Self::UnknownSNMPVersion => write!(f, "unknown snmp version"),
+            Self::InvalidV3Flags => write!(f, "snmp v3 flag header doesn't exists"),
+            Self::InvalidSecurityLevel => write!(f, "incoming packet doesn't match minimum security level"),
+            Self::USMParamDecodeError => write!(f, "failed decoding usm parameters"),
+            Self::USMParamEncodeError => write!(f, "failed encoding usm parameters"),
+            Self::DecryptionFailure => write!(f, "failed decrypting payload"),
         }
     }
 }

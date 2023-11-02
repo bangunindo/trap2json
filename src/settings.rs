@@ -4,7 +4,11 @@ use serde::{Deserialize, de};
 use serde_enum_str::Deserialize_enum_str;
 use clap::Parser;
 use std::default::Default;
-use crate::rsnmp::{auth, cipher};
+use crate::rsnmp::{
+    auth,
+    cipher,
+    handler::{AUTH_FLAG, PRIV_FLAG},
+};
 use validator::Validate;
 use std::io::BufReader;
 use std::fs::File;
@@ -103,12 +107,22 @@ pub struct User {
     pub skip_timeliness_checks: bool,
 }
 
+impl User {
+    pub fn minimum_security_level(&self) -> u8 {
+        match (self.require_privacy, self.no_auth) {
+            (true, _) => AUTH_FLAG | PRIV_FLAG,
+            (false, false) => AUTH_FLAG,
+            (false, true) => 0x00,
+        }
+    }
+}
+
 fn deserialize_engineid<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
     where D: de::Deserializer<'de>
 {
     let s: String = de::Deserialize::deserialize(deserializer)?;
-    if s.starts_with("0x") {
-        let res = hex::decode(&s[2..]).map_err(|e| de::Error::custom("incorrect engine_id ".to_string()+&e.to_string()));
+    if let Some(s) = s.strip_prefix("0x") {
+        let res = hex::decode(s).map_err(|e| de::Error::custom("incorrect engine_id ".to_string() + &e.to_string()));
         match res {
             Ok(data) => Ok(Some(data)),
             Err(e) => Err(e),
