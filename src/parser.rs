@@ -3,106 +3,82 @@ use async_channel::{Receiver, RecvError};
 use tokio::sync::mpsc::UnboundedSender;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use rasn::{
-    Codec,
-    types::OctetString,
-    ber::{decode, encode},
+use std::str;
+use tokio::sync::oneshot::channel;
+use crate::rsnmp::{
+    handler,
+    handler::SecurityParameters,
 };
-use rasn_snmp::{v1, v2, v2c, v3};
-use crate::rsnmp::{cipher, auth};
 use crate::settings;
+
+#[derive(Debug)]
+struct ParseResult {
+    response: Option<Vec<u8>>,
+    error: Option<Error>,
+}
+
+fn community_check(
+    config: Arc<settings::Settings>,
+    community: &[u8],
+) -> Result<(), Error> {
+    if config.snmptrapd.auth.enable {
+        let community = str::from_utf8(community)
+            .map_err(|_| Error::msg("community is not valid string"))?;
+        if !config.snmptrapd.auth.is_community_allowed(community) {
+            return Err(Error::msg(format!("community not allowed: {}", community)));
+        }
+    }
+    Ok(())
+}
 
 fn parse_snmp_packet(
     data: Vec<u8>,
-    addr: SocketAddr,
-    socket_idx: usize,
-    send: tokio::sync::oneshot::Sender<Option<(Vec<u8>, SocketAddr, usize)>>,
-) -> () {
-    if let Ok(message) = decode::<v2c::Message<v2::Pdus>>(&data) {
-        println!("{:?}", message);
-        match message.data {
-            v2::Pdus::InformRequest(ref req) => {
-                let mut resp = message.clone();
-                let mut req = req.0.clone();
-                req.error_index = 0;
-                req.error_status = v2::Pdu::ERROR_STATUS_NO_ERROR;
-                resp.data = v2::Pdus::Response(v2::Response(req));
-                let data = encode(&resp).unwrap();
-                send.send(Some((data, addr, socket_idx))).unwrap();
-                return;
-            }
-            v2::Pdus::Trap(trap) => {}
-            _ => {}
-        }
-    } else if let Ok(mut message) = decode::<v3::Message>(&data) {
-        match message.decode_security_parameters::<v3::USMSecurityParameters>(Codec::Ber) {
-            Ok(res) => {
-                println!("{:0x}", res.authoritative_engine_id);
-                println!("{:?}", res);
-                let cipher_algo = cipher::CipherType::AES256;
-                let hash_algo = auth::AuthType::SHA512;
-                if res.authentication_parameters.len() > 0 {
-                    let mut resp = message.clone();
-                    resp.encode_security_parameters(
-                        Codec::Ber,
-                        &v3::USMSecurityParameters {
-                            authoritative_engine_id: res.authoritative_engine_id.clone(),
-                            authoritative_engine_boots: res.authoritative_engine_boots.clone(),
-                            authoritative_engine_time: res.authoritative_engine_time.clone(),
-                            user_name: res.user_name.clone(),
-                            authentication_parameters: OctetString::from(vec![0u8; res.authentication_parameters.len()]),
-                            privacy_parameters: res.privacy_parameters.clone(),
-                        },
-                    )
-                        .map_err(|_| anyhow::Error::msg("encode error"))
-                        .unwrap();
-                    let payload = encode(&resp).unwrap();
-                    let t = hash_algo.integrity_check(
-                        &payload,
-                        b"sssssssss",
-                        &res.authoritative_engine_id,
-                        &res.authentication_parameters,
-                    );
-                    let u = hash_algo.timeliness_check(
-                        res.authoritative_engine_boots.to_u32_digits().1[0],
-                        res.authoritative_engine_time.to_u32_digits().1[0] as u64,
-                        &res.authoritative_engine_id,
-                    );
-                }
-                if let v3::ScopedPduData::EncryptedPdu(ref payload) = message.scoped_data {
-                    let mut payload = payload.clone().to_vec();
-                    let pdu_data = cipher_algo.decrypt(
-                        hash_algo,
-                        &mut payload,
-                        b"sssssssss",
-                        res.authoritative_engine_boots.to_u32_digits().1[0],
-                        res.authoritative_engine_time.to_u32_digits().1[0],
-                        &res.authoritative_engine_id,
-                        &res.privacy_parameters,
-                    );
-                    match pdu_data {
-                        Err(e) => {
-                            println!("{}", e);
+    config: Arc<settings::Settings>,
+) -> ParseResult {
+    let mut result = ParseResult{
+        response: None,
+        error: None,
+    };
+    let m = handler::decode_message(&data);
+    match m {
+        Ok(handler::Message::V1(m)) => {
+            result.error = community_check(config.clone(), &m.message.community).err();
+        },
+        Ok(handler::Message::V2C(m)) => {
+            result.response = m.response;
+            result.error = community_check(config.clone(), &m.message.community).err();
+        },
+        Ok(handler::Message::V3(mut m)) => {
+            let SecurityParameters::USM(usm) = &m.security_parameters;
+            match str::from_utf8(&usm.user_name) {
+                Ok(username) => {
+                    if let Some(user) = config.snmptrapd.auth.get_user(username) {
+                        let e = m.process(
+                            user.minimum_security_level(),
+                            user.auth_type,
+                            user.auth_passphrase.as_ref(),
+                            user.privacy_protocol,
+                            user.privacy_passphrase.as_ref(),
+                            user.skip_timeliness_checks,
+                        ).err();
+                        if let Some(e) = e {
+                            result.error = Some(Error::from(e));
                         }
-                        Ok(_) => {
-                            if let Ok(pdu) = decode::<v3::ScopedPdu>(&payload) {
-                                println!("{:0x}", &pdu.engine_id);
-                                message.scoped_data = v3::ScopedPduData::CleartextPdu(pdu);
-                            }
-                        }
+                        result.response = m.response;
+                    } else {
+                        result.error = Some(Error::msg(format!("username not allowed: {}", username)));
                     }
+                },
+                Err(_) => {
+                    result.error = Some(Error::msg("username is not valid string"));
                 }
             }
-            _ => {}
-        };
-        println!("{:?}", message);
-    } else if let Ok(message) = decode::<v1::Message<v1::Pdus>>(&data) {
-        println!("{:?}", message);
-    } else {
-        log::debug!(target = "parse_worker"; "cannot decode snmp packet");
+        },
+        Err(e) => {
+            result.error = Some(Error::from(e));
+        }
     }
-
-    send.send(None).unwrap();
+    result
 }
 
 pub async fn parse_worker(
@@ -113,21 +89,25 @@ pub async fn parse_worker(
     loop {
         match r.recv().await {
             Ok(data) => {
-                let (send, recv) = tokio::sync::oneshot::channel();
+                let (send, recv) = channel();
+                let config = config.clone();
+                let (payload, addr, socket_idx) = data;
                 rayon::spawn(move || {
-                    parse_snmp_packet(
-                        data.0,
-                        data.1,
-                        data.2,
-                        send,
+                    let r = parse_snmp_packet(
+                        payload,
+                        config,
                     );
+                    if let Some(e) = r.error {
+                        log::debug!(target = "parser"; "failed processing message: {}", e.to_string());
+                    }
+                    send.send(r.response).unwrap();
                 });
-                if let Some((data, addr, socket_idx)) = recv.await? {
-                    informs[socket_idx].send((data, addr))?;
+                if let Some(payload) = recv.await? {
+                    informs[socket_idx].send((payload, addr))?;
                 }
             }
             Err(RecvError) => {
-                log::debug!(target = "parseworker"; "worker shutdown");
+                log::debug!(target = "parser"; "worker shutdown");
                 return Ok(());
             }
         }

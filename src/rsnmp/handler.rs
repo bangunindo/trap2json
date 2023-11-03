@@ -44,15 +44,15 @@ impl V3Message {
         &mut self,
         minimum_security_level: u8,
         auth_type: Option<auth::AuthType>,
-        auth_passphrase: Option<&str>,
+        auth_passphrase: Option<&String>,
         privacy_protocol: Option<cipher::CipherType>,
-        privacy_passphrase: Option<&str>,
+        privacy_passphrase: Option<&String>,
         skip_timeliness_checks: bool,
     ) -> Result<(), Error> {
         let flags = self.message.global_data.flags
             .get(0)
             .ok_or(Error::InvalidV3Flags)?;
-        let expecting_response = flags >> 2 != 0;
+        // let expecting_response = flags >> 2 != 0;
         let security_level = flags << 6 >> 6;
         if security_level < minimum_security_level ||
             (security_level & PRIV_FLAG != 0 && security_level & AUTH_FLAG == 0) {
@@ -180,7 +180,7 @@ fn decode_v2_message(data: &[u8]) -> Result<Message, Error> {
 }
 
 fn decode_v3_message(data: &[u8]) -> Result<Message, Error> {
-    let mut m: v3::Message = decode(&data).map_err(|_| Error::ASNDecodeError)?;
+    let m: v3::Message = decode(&data).map_err(|_| Error::ASNDecodeError)?;
     let usm_security_model = m.decode_security_parameters::<v3::USMSecurityParameters>(Codec::Ber)
         .map_err(|_| Error::USMParamDecodeError)?;
     Ok(

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Formatter;
 use serde::{Deserialize, de};
 use serde_enum_str::Deserialize_enum_str;
@@ -144,6 +144,8 @@ pub struct Auth {
     pub user: Vec<User>,
     #[serde(skip, default = "HashMap::new")]
     user_map: HashMap<String, User>,
+    #[serde(skip, default = "HashSet::new")]
+    community_set: HashSet<String>,
 }
 
 impl Default for Auth {
@@ -153,18 +155,25 @@ impl Default for Auth {
             community: vec![],
             user: vec![],
             user_map: HashMap::new(),
+            community_set: HashSet::new(),
         }
     }
 }
 
 impl Auth {
-    fn build_user_map(&mut self) {
+    fn build(&mut self) {
         for user in self.user.iter() {
             self.user_map.insert(user.username.clone(), user.clone());
+        }
+        for com in self.community.iter() {
+            self.community_set.insert(com.name.clone());
         }
     }
     pub fn get_user(&self, username: &str) -> Option<&User> {
         self.user_map.get(username)
+    }
+    pub fn is_community_allowed(&self, community: &str) -> bool {
+        self.community_set.contains(community)
     }
 }
 
@@ -241,7 +250,7 @@ impl Settings {
             }
         }
         r.validate()?;
-        r.snmptrapd.auth.build_user_map();
+        r.snmptrapd.auth.build();
         Ok(r)
     }
 }
