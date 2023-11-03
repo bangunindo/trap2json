@@ -1687,6 +1687,7 @@ dependencies = [
  "log",
  "md-5",
  "moka",
+ "num-traits",
  "num_cpus",
  "rasn",
  "rasn-mib",

@@ -3,10 +3,18 @@ use rasn::{
     types::{Integer, OctetString},
     AsnType,
     Decode,
-    Encode,
-    ber::{decode, encode},
+    ber::{
+        decode,
+        encode,
+        de::{
+            Decoder,
+            DecoderOptions,
+        },
+    },
     Codec,
+    Decoder as _,
 };
+use num_traits::identities::Zero;
 use super::{
     error::Error,
     auth,
@@ -141,11 +149,6 @@ pub enum Message {
     V3(V3Message),
 }
 
-#[derive(AsnType, Debug, Decode, Encode, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-struct SnmpVersion {
-    version: Integer,
-}
-
 fn decode_v1_message(data: &[u8]) -> Result<Message, Error> {
     let m: v1::Message<v1::Pdus> = decode(&data).map_err(|_| Error::ASNDecodeError)?;
     Ok(
@@ -194,10 +197,27 @@ fn decode_v3_message(data: &[u8]) -> Result<Message, Error> {
     )
 }
 
+#[derive(AsnType, Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+struct SnmpVersion {
+    version: Integer,
+}
+
 pub fn decode_message(data: &[u8]) -> Result<Message, Error> {
-    let r = decode::<SnmpVersion>(data)
-        .map_err(|_| Error::ASNDecodeError)?;
-    match r.version.to_u32_digits().1[0] {
+    let mut snmp_version = 255;
+    let mut decoder = Decoder::new(data, DecoderOptions::ber());
+    let _ = decoder.decode_sequence(SnmpVersion::TAG, |dec| {
+        let version = Integer::decode(dec)?;
+        if version.is_zero() {
+            snmp_version = 0;
+        } else {
+            snmp_version = version.to_u32_digits().1[0];
+        }
+        Ok(SnmpVersion { version: Default::default() })
+    });
+    if snmp_version == 255 {
+        return Err(Error::ASNDecodeError);
+    }
+    match snmp_version {
         0 => decode_v1_message(data),
         1 => decode_v2_message(data),
         3 => decode_v3_message(data),

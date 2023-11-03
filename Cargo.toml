@@ -20,6 +20,7 @@ log = { version = "0.4.20", features = ["serde", "kv_unstable"] }
 md-5 = "0.10.6"
 moka = { version = "0.12.1", features = ["sync"] }
 num_cpus = "1.16.0"
+num-traits = "0.2.17"
 rasn = "0.11.0"
 rasn-mib = "0.11.0"
 rasn-smi = "0.11.0"

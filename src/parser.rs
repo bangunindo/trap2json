@@ -39,16 +39,16 @@ fn parse_snmp_packet(
         response: None,
         error: None,
     };
-    let m = handler::decode_message(&data);
+    let mut m = handler::decode_message(&data);
     match m {
-        Ok(handler::Message::V1(m)) => {
+        Ok(handler::Message::V1(ref m)) => {
             result.error = community_check(config.clone(), &m.message.community).err();
         },
-        Ok(handler::Message::V2C(m)) => {
-            result.response = m.response;
+        Ok(handler::Message::V2C(ref m)) => {
+            result.response = m.response.clone();
             result.error = community_check(config.clone(), &m.message.community).err();
         },
-        Ok(handler::Message::V3(mut m)) => {
+        Ok(handler::Message::V3(ref mut m)) => {
             let SecurityParameters::USM(usm) = &m.security_parameters;
             match str::from_utf8(&usm.user_name) {
                 Ok(username) => {
@@ -64,7 +64,7 @@ fn parse_snmp_packet(
                         if let Some(e) = e {
                             result.error = Some(Error::from(e));
                         }
-                        result.response = m.response;
+                        result.response = m.response.clone();
                     } else {
                         result.error = Some(Error::msg(format!("username not allowed: {}", username)));
                     }
@@ -78,6 +78,7 @@ fn parse_snmp_packet(
             result.error = Some(Error::from(e));
         }
     }
+    println!("{:?}", &m);
     result
 }
 

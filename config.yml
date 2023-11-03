@@ -3,7 +3,7 @@ logger:
   # trace will show all kinds of data being processed
   # possible values: trace, debug, info, warn, error, fatal
   # default: info
-  level: info
+  level: debug
   # possible values: console, json
   # default: console
   format: console
