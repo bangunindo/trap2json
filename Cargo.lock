@@ -1677,6 +1677,7 @@ dependencies = [
  "aes",
  "anyhow",
  "async-channel",
+ "bytes",
  "cbc",
  "cfb-mode",
  "clap",

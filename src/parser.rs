@@ -32,7 +32,7 @@ fn community_check(
 }
 
 fn parse_snmp_packet(
-    data: Vec<u8>,
+    data: bytes::Bytes,
     config: Arc<settings::Settings>,
 ) -> ParseResult {
     let mut result = ParseResult{
@@ -83,7 +83,7 @@ fn parse_snmp_packet(
 }
 
 pub async fn parse_worker(
-    r: Receiver<(Vec<u8>, SocketAddr, usize)>,
+    r: Receiver<(bytes::Bytes, SocketAddr, usize)>,
     informs: Vec<UnboundedSender<(Vec<u8>, SocketAddr)>>,
     config: Arc<settings::Settings>,
 ) -> Result<(), Error> {

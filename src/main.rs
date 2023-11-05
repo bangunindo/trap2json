@@ -50,7 +50,7 @@ async fn main() -> Result<(), Error> {
                 tokio::select! {
                     res = socket.recv_from(&mut buf) => {
                         let (size, addr) = res.unwrap();
-                        let data = buf[..size].to_vec();
+                        let data = bytes::Bytes::from(buf[..size].to_vec());
                         s.send((data, addr, idx)).await.unwrap();
                     }
                     res = inform_r.recv() => {
