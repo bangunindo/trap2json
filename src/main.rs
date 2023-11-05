@@ -40,7 +40,7 @@ async fn main() -> Result<(), Error> {
     let (s, r) = async_channel::unbounded();
     for (idx, addr) in config.snmptrapd.listening.iter().enumerate() {
         let socket = UdpSocket::bind(addr).await?;
-        let mut buf = vec![0u8; 4096];
+        let mut buf = bytes::BytesMut::with_capacity(4096);
         let s = s.clone();
         let (inform_s, mut inform_r) = mpsc::unbounded_channel::<(Vec<u8>, SocketAddr)>();
         let handle = spawn(async move {
@@ -48,9 +48,9 @@ async fn main() -> Result<(), Error> {
             'main_loop:
             loop {
                 tokio::select! {
-                    res = socket.recv_from(&mut buf) => {
+                    res = socket.recv_buf_from(&mut buf) => {
                         let (size, addr) = res.unwrap();
-                        let data = bytes::Bytes::from(buf[..size].to_vec());
+                        let data = buf.split().freeze();
                         s.send((data, addr, idx)).await.unwrap();
                     }
                     res = inform_r.recv() => {
