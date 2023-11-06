@@ -185,6 +185,8 @@ impl AuthType {
         if engine_boots >= ENGINE_BOOTS_MAX || engine_time >= ENGINE_TIME_MAX {
             return Err(Error::NotInTimeWindowError);
         }
+        // snmptrap from net-snmp package sends this in milliseconds
+        let engine_time = engine_time / 100;
         let local_engine = AUTH_ENGINE_CACHE.get(engine_id);
         let now = SystemTime::now();
         if let Some(l) = local_engine {

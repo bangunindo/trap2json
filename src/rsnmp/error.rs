@@ -21,7 +21,7 @@ impl Display for Error {
         match self {
             Self::AuthenticationError => write!(f, "incorrect authentication parameter length"),
             Self::AuthenticationFailure => write!(f, "auth doesn't match"),
-            Self::NotInTimeWindowError => write!(f, "engine time/boot is not incremented"),
+            Self::NotInTimeWindowError => write!(f, "engine time/boot is not monotonically incremented"),
             Self::CipherDESUnpadError => write!(f, "des cipher text is not zero padded"),
             Self::ASNDecodeError => write!(f, "failed decoding packet"),
             Self::ASNEncodeError => write!(f, "failed encoding packet"),

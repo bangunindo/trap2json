@@ -49,7 +49,7 @@ async fn main() -> Result<(), Error> {
             loop {
                 tokio::select! {
                     res = socket.recv_buf_from(&mut buf) => {
-                        let (size, addr) = res.unwrap();
+                        let (_, addr) = res.unwrap();
                         let data = buf.split().freeze();
                         s.send((data, addr, idx)).await.unwrap();
                     }
