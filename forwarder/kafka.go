@@ -3,9 +3,9 @@ package forwarder
 import (
 	"context"
 	"encoding/json"
-	"github.com/antonmedv/expr"
-	"github.com/antonmedv/expr/vm"
 	"github.com/bangunindo/trap2json/snmp"
+	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
 	"github.com/segmentio/kafka-go"
 )
 
