@@ -160,8 +160,7 @@ func (z *ZabbixTrapper) Run() {
 		} else {
 			z.ctrLookupFailed.Inc()
 			z.logger.Debug().
-				Str("src_address", m.SrcAddress).
-				Str("agent_address", m.AgentAddress.String).
+				Interface("data", m).
 				Msg("zabbix failed lookup")
 		}
 		if address == ":0" {
