@@ -160,6 +160,10 @@ func (z *ZabbixTrapper) Run() {
 		} else {
 			z.ctrLookupFailed.Inc()
 		}
+		if address == ":0" {
+			z.ctrDropped.Inc()
+			continue
+		}
 		c, err := zsend.NewClient(address, hostname)
 		if err != nil {
 			z.logger.Warn().Err(err).Msg("failed resolving address")

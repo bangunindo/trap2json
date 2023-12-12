@@ -77,11 +77,11 @@ type ZabbixLookup struct {
 }
 
 func (z *ZabbixLookup) refresh() {
-	z.logger.Debug().Msg("starting background cache refresh")
+	z.logger.Info().Msg("starting background cache refresh")
 	now := time.Now()
 	defer func() {
 		dur := now.Sub(time.Now())
-		z.logger.Debug().Str("duration", dur.String()).Msg("background cache refresh done")
+		z.logger.Info().Str("duration", dur.String()).Msg("background cache refresh done")
 	}()
 	if driver, dsn, err := z.conf.Advanced.GetDSN(); err != nil {
 		z.logger.Warn().Err(err).Msg("failed reading db_url")
