@@ -80,7 +80,7 @@ func (z *ZabbixLookup) refresh() {
 	z.logger.Info().Msg("starting background cache refresh")
 	now := time.Now()
 	defer func() {
-		dur := now.Sub(time.Now())
+		dur := time.Since(now)
 		z.logger.Info().Str("duration", dur.String()).Msg("background cache refresh done")
 	}()
 	if driver, dsn, err := z.conf.Advanced.GetDSN(); err != nil {
