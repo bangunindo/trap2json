@@ -143,6 +143,7 @@ func (b *Base) Get() (*snmp.Message, error) {
 
 // Send snmp message to forwarder
 func (b *Base) Send(message *snmp.Message) {
+	b.ctrProcessed.Inc()
 	if b.config.QueueSize == 0 || b.queue.Len() < b.config.QueueSize {
 		err := b.queue.Put(message)
 		if err != nil {
