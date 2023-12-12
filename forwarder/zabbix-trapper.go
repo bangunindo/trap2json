@@ -159,6 +159,10 @@ func (z *ZabbixTrapper) Run() {
 			hostname = r.Hostname
 		} else {
 			z.ctrLookupFailed.Inc()
+			z.logger.Debug().
+				Str("src_address", m.SrcAddress).
+				Str("agent_address", m.AgentAddress.String).
+				Msg("zabbix failed lookup")
 		}
 		if address == ":0" {
 			z.ctrDropped.Inc()
