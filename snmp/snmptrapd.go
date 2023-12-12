@@ -154,7 +154,7 @@ func (c *Config) GetBufferSize() (int, error) {
 		return 0, errors.New("empty buffer size")
 	}
 	multiplier := 1
-	switch c.BufferSize[len(c.BufferSize)-1] {
+	switch strings.ToLower(c.BufferSize)[len(c.BufferSize)-1] {
 	case 'k':
 		multiplier = 1e3
 	case 'm':
