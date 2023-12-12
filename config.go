@@ -29,6 +29,7 @@ func parseConfig(path string) (config, error) {
 	v.SetDefault("prometheus.port", 9285)
 	v.SetDefault("snmptrapd.magic_begin", "--TFWDBEGIN--")
 	v.SetDefault("snmptrapd.magic_end", "--TFWDEND--")
+	v.SetDefault("snmptrapd.buffer_size", "64k")
 	v.SetConfigFile(path)
 	err := v.ReadInConfig()
 	if err != nil {

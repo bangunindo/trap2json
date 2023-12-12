@@ -159,8 +159,15 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	forwarderWg.Add(1)
 	go forwarder.StartForwarders(forwarderWg, c.Forwarders, forwarderChan)
 
+	bufferSize, err := c.SnmpTrapD.GetBufferSize()
+	if err != nil {
+		log.Warn().Err(err).Msg("failed parsing snmptrapd.buffer_size")
+		bufferSize = snmp.DefaultBufferSize
+	}
+	buf := make([]byte, bufferSize)
 	scanner := bufio.NewScanner(r)
 	scanner.Split(SplitAt(c.SnmpTrapD.MagicEnd))
+	scanner.Buffer(buf, bufferSize)
 	magicBegin := []byte(c.SnmpTrapD.MagicBegin)
 	magicBeginLen := len(magicBegin)
 	log.Info().Msg("trap2json started")

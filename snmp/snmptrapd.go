@@ -146,10 +146,35 @@ type Config struct {
 	AdditionalConfig string `mapstructure:"additional_config"`
 	MagicBegin       string `mapstructure:"magic_begin"`
 	MagicEnd         string `mapstructure:"magic_end"`
+	BufferSize       string `mapstructure:"buffer_size"`
+}
+
+func (c *Config) GetBufferSize() (int, error) {
+	if len(c.BufferSize) == 0 {
+		return 0, errors.New("empty buffer size")
+	}
+	multiplier := 1
+	switch c.BufferSize[len(c.BufferSize)-1] {
+	case 'k':
+		multiplier = 1e3
+	case 'm':
+		multiplier = 1e6
+	case 'g':
+		multiplier = 1e9
+	case 't', 'p', 'e':
+		return 0, errors.New("buffer_size too large, probably a mistake")
+	}
+	bufSize := c.BufferSize[:len(c.BufferSize)-1]
+	bufInt, err := strconv.Atoi(bufSize)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed reading buffer_size")
+	}
+	return bufInt * multiplier, nil
 }
 
 const (
-	PidFilePath = "/var/run/snmptrapd/snmptrapd.pid"
+	PidFilePath       = "/var/run/snmptrapd/snmptrapd.pid"
+	DefaultBufferSize = 64000
 )
 
 func (c *Config) Serialize(path string) error {

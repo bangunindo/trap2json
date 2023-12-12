@@ -201,6 +201,10 @@ snmptrapd:
   magic_begin: --TFWDBEGIN--
   # default: --TFWDEND--
   magic_end: --TFWDEND--
+  # define buffer size for reading snmptrapd log output, trap packet usually ranges from 1k - 5k
+  # and the default buffer_size should be enough
+  # default: 64k
+  buffer_size: 64k
   additional_config: |
     # WARNING: you have to know what you're doing, as it might break the application
     # you can add additional config for snmptrapd.conf here, for example, adding tls/dtls connection config
