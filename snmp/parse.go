@@ -219,15 +219,18 @@ func ParserWorker(
 	messageChan chan<- Message,
 ) {
 	defer wg.Done()
+	processed := metrics.ParserProcessed.With(prometheus.Labels{"worker": strconv.Itoa(i)})
+	succeeded := metrics.ParserSucceeded.With(prometheus.Labels{"worker": strconv.Itoa(i)})
+	dropped := metrics.ParserDropped.With(prometheus.Labels{"worker": strconv.Itoa(i)})
 	for raw := range parseChan {
-		metrics.ParserProcessed.With(prometheus.Labels{"worker": strconv.Itoa(i)}).Inc()
+		processed.Inc()
 		var msg Message
 		if err := msg.UnmarshalText(raw); err != nil {
 			log.Debug().Err(err).Str("data", string(raw)).Msg("message parsing failed")
-			metrics.ParserDropped.With(prometheus.Labels{"worker": strconv.Itoa(i)}).Inc()
+			dropped.Inc()
 		} else {
 			messageChan <- msg
-			metrics.ParserSucceeded.With(prometheus.Labels{"worker": strconv.Itoa(i)}).Inc()
+			succeeded.Inc()
 		}
 	}
 }
