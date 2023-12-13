@@ -77,18 +77,37 @@ forwarders:
       path: /output.log
       # path: ""
   - id: kafka
-    # kafka forwarder doesn't support sasl auth yet
     kafka:
       # list of kafka broker hosts
       hosts:
         - 127.0.0.1:9092
         - 127.0.0.2:9092
+      # ssl/tls configuration to connect to kafka
+      # default: no tls
+      tls:
+        # trust any server certificate
+        # default: false
+        insecure_skip_verify: false
+        # path to ca cert
+        ca_cert: ""
+        # path to client cert, used for TLS authentication (mTLS)
+        client_cert: ""
+        # path to client key, used for TLS authentication (mTLS)
+        client_key: ""
+      # sasl authentication
+      # default: no sasl
+      sasl:
+        # sasl mechanism, possible values: PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+        # default: PLAIN
+        mechanism: "PLAIN"
+        username: ""
+        password: ""
       # define how sent kafka messages ask for acknowledgements
       # possible values: none, one, all
       # default: none
       required_acks: "none"
       # field name for kafka message's key. it's useful when you have multiple
-      # partitions on you kafka topic and want to route the same key to the same
+      # partitions on your kafka topic and want to route the same key to the same
       # partition
       # it is evaluated as a template, just like json_format
       # default: no default
