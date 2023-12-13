@@ -47,6 +47,11 @@ Or if you want to pass extra arguments to snmptrapd
 ```shell
 docker run -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest -Lf /var/log/trap2json/snmptrapd.log -Dusm
 ```
+The buffer size for snmptrapd can be customized by setting `T2J_BUFFERSIZE` environment variable.
+By default, it's set to 32M to accommodate trap2json startup time.
+```shell
+docker run -e T2J_BUFFERSIZE=128M -v ./config.yml:/etc/trap2json/config.yml -p 162:10162/udp bangunindo/trap2json:latest
+```
 
 ## Zabbix Forwarder
 For zabbix forwarder to work, you need to create an item with Zabbix Trapper type and text/log data type. If you need

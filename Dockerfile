@@ -13,6 +13,7 @@ RUN apt-get update && \
     snmptrapd=5.9.1+* \
     snmp=5.9.1+* \
     snmp-mibs-downloader=1.5 \
+    pv \
     tzdata ca-certificates
 RUN mkdir /etc/trap2json /etc/trap2json/mibs /var/run/snmptrapd /var/log/trap2json
 COPY --from=buildStage /trap2json /usr/local/bin/trap2json
@@ -23,4 +24,5 @@ RUN chmod +x entrypoint.sh
 EXPOSE 10162/udp
 # prometheus
 EXPOSE 9285
+ENV T2J_BUFFERSIZE=32M
 ENTRYPOINT ["/entrypoint.sh"]
