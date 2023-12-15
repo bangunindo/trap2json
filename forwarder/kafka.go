@@ -14,6 +14,9 @@ import (
 	"github.com/segmentio/kafka-go/sasl/scram"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 type KafkaSaslMechanism int
@@ -71,12 +74,18 @@ type KafkaConfig struct {
 	Topic        string
 	Tls          *KafkaTls
 	Sasl         *KafkaSasl
+	BatchSize    int      `mapstructure:"batch_size"`
+	BatchTimeout Duration `mapstructure:"batch_timeout"`
 }
+
+const kafkaMaxGoroutine = 10000
 
 type Kafka struct {
 	Base
 
 	keyFieldTemplate *vm.Program
+	wg               *sync.WaitGroup
+	spawned          *atomic.Int32
 }
 
 func (k *Kafka) Run() {
@@ -139,7 +148,8 @@ func (k *Kafka) Run() {
 		Balancer:     kafka.Murmur2Balancer{},
 		RequiredAcks: k.config.Kafka.RequiredAcks,
 		Topic:        k.config.Kafka.Topic,
-		BatchSize:    1,
+		BatchSize:    k.config.Kafka.BatchSize,
+		BatchTimeout: k.config.Kafka.BatchTimeout.Duration,
 		Transport:    transport,
 	}
 	defer producer.Close()
@@ -168,23 +178,36 @@ func (k *Kafka) Run() {
 				}
 			}
 		}
-		if err := producer.WriteMessages(
-			context.Background(),
-			kafka.Message{
-				Key:   key,
-				Value: m.MessageJSON,
-			},
-		); err != nil {
-			k.Retry(m, err)
-		} else {
-			k.ctrSucceeded.Inc()
+		if k.spawned.Load() >= kafkaMaxGoroutine {
+			k.wg.Wait()
 		}
+		k.wg.Add(1)
+		k.spawned.Add(1)
+		go func() {
+			defer func() {
+				k.spawned.Add(-1)
+				k.wg.Done()
+			}()
+			if err := producer.WriteMessages(
+				context.Background(),
+				kafka.Message{
+					Key:   key,
+					Value: m.MessageJSON,
+				},
+			); err != nil {
+				k.Retry(m, err)
+			} else {
+				k.ctrSucceeded.Inc()
+			}
+		}()
 	}
 }
 
 func NewKafka(c Config, idx int) Forwarder {
 	fwd := &Kafka{
-		Base: NewBase(c, idx),
+		Base:    NewBase(c, idx),
+		wg:      new(sync.WaitGroup),
+		spawned: new(atomic.Int32),
 	}
 	var err error
 	if fwd.config.Kafka.KeyField != "" {
@@ -195,6 +218,12 @@ func NewKafka(c Config, idx int) Forwarder {
 		if err != nil {
 			fwd.logger.Fatal().Err(err).Msg("failed compiling kafka.key_field expression")
 		}
+	}
+	if fwd.config.Kafka.BatchSize == 0 {
+		fwd.config.Kafka.BatchSize = 100
+	}
+	if fwd.config.Kafka.BatchTimeout.Duration == 0 {
+		fwd.config.Kafka.BatchTimeout.Duration = time.Second
 	}
 	go fwd.Run()
 	return fwd

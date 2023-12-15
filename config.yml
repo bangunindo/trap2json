@@ -115,6 +115,13 @@ forwarders:
       # your kafka topic
       # default: no default
       topic: ""
+      # send messages to kafka when this many values are ready to be sent
+      # default: 100
+      batch_size: 100
+      # message batch will be sent at least for this many duration regardless
+      # of batch size
+      # default: 1s
+      batch_timeout: 1s
   - id: mqtt
     # kafka forwarder doesn't support auth yet
     mqtt:
