@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.17.0
 	github.com/rs/zerolog v1.31.0
-	github.com/segmentio/kafka-go v0.4.46
+	github.com/segmentio/kafka-go v0.4.47
 	github.com/sleepinggenius2/gosmi v0.4.4
 	github.com/spf13/viper v1.18.1
 	github.com/stretchr/testify v1.8.4
@@ -51,6 +51,9 @@ require (
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
+	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+	github.com/xdg-go/scram v1.1.2 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.16.0 // indirect
