@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 type KafkaSaslMechanism int
@@ -60,19 +59,12 @@ type KafkaSasl struct {
 	Mechanism KafkaSaslMechanism
 }
 
-type KafkaTls struct {
-	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
-	CaCert             string `mapstructure:"ca_cert"`
-	ClientCert         string `mapstructure:"client_cert"`
-	ClientKey          string `mapstructure:"client_key"`
-}
-
 type KafkaConfig struct {
 	RequiredAcks kafka.RequiredAcks `mapstructure:"required_acks"`
 	KeyField     string             `mapstructure:"key_field"`
 	Hosts        []string
 	Topic        string
-	Tls          *KafkaTls
+	Tls          *Tls
 	Sasl         *KafkaSasl
 	BatchSize    int      `mapstructure:"batch_size"`
 	BatchTimeout Duration `mapstructure:"batch_timeout"`
@@ -218,12 +210,6 @@ func NewKafka(c Config, idx int) Forwarder {
 		if err != nil {
 			fwd.logger.Fatal().Err(err).Msg("failed compiling kafka.key_field expression")
 		}
-	}
-	if fwd.config.Kafka.BatchSize == 0 {
-		fwd.config.Kafka.BatchSize = 100
-	}
-	if fwd.config.Kafka.BatchTimeout.Duration == 0 {
-		fwd.config.Kafka.BatchTimeout.Duration = time.Second
 	}
 	go fwd.Run()
 	return fwd

@@ -1,0 +1,11 @@
+logger:
+  level: debug
+forwarders:
+  - id: http
+    http:
+      url: http://host.docker.internal:9789
+snmptrapd:
+  auth:
+    enable: true
+    community:
+      - name: public

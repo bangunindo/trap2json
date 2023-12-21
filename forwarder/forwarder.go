@@ -62,6 +62,7 @@ type Config struct {
 	Kafka         *KafkaConfig
 	MQTT          *MQTTConfig
 	Trap          *SNMPTrapConfig
+	HTTP          *HTTPConfig
 	ZabbixTrapper *ZabbixTrapperConfig `mapstructure:"zabbix_trapper"`
 }
 
@@ -70,6 +71,8 @@ func (c *Config) Type() string {
 		return "file"
 	} else if c.Kafka != nil {
 		return "kafka"
+	} else if c.HTTP != nil {
+		return "http"
 	} else if c.MQTT != nil {
 		return "mqtt"
 	} else if c.Trap != nil {
@@ -81,6 +84,13 @@ func (c *Config) Type() string {
 	} else {
 		return "unknown"
 	}
+}
+
+type Tls struct {
+	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
+	CaCert             string `mapstructure:"ca_cert"`
+	ClientCert         string `mapstructure:"client_cert"`
+	ClientKey          string `mapstructure:"client_key"`
 }
 
 type Forwarder interface {
@@ -347,7 +357,18 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 		case "file":
 			forwarders = append(forwarders, NewFile(fwd, i))
 		case "kafka":
+			if fwd.Kafka.BatchSize == 0 {
+				fwd.Kafka.BatchSize = 100
+			}
+			if fwd.Kafka.BatchTimeout.Duration == 0 {
+				fwd.Kafka.BatchTimeout.Duration = time.Second
+			}
 			forwarders = append(forwarders, NewKafka(fwd, i))
+		case "http":
+			if fwd.HTTP.Timeout.Duration == 0 {
+				fwd.HTTP.Timeout.Duration = 5 * time.Second
+			}
+			forwarders = append(forwarders, NewHTTP(fwd, i))
 		case "mqtt":
 			if fwd.MQTT.Ordered == nil {
 				b := true

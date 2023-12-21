@@ -118,7 +118,7 @@ forwarders:
       # send messages to kafka when this many values are ready to be sent
       # default: 100
       batch_size: 100
-      # message batch will be sent at least for this many duration regardless
+      # message batch will be sent at least after this many duration regardless
       # of batch size
       # default: 1s
       batch_timeout: 1s
@@ -182,6 +182,42 @@ forwarders:
         privacy_passphrase: testpriv
       # for snmp v3. context name to use
       context: name
+  - id: http
+    # forward to a http server. payload is in the http body
+    # request will be considered successful when receiving 2xx status code and retried otherwise
+    http:
+      # mandatory, URL to http server
+      url: https://localhost:8080/trap?token=xxxx
+      # default: POST
+      method: POST
+      # http headers to add to your requests in key: value format
+      # default: empty
+      headers:
+        Authorization:
+          - Bearer xxxx
+      # add http basic auth
+      # default: empty
+      basic_auth:
+        username: user
+        password: passwd
+      # ssl/tls configuration to connect to http server
+      # default: empty
+      tls:
+        # trust any server certificate
+        # default: false
+        insecure_skip_verify: false
+        # path to ca cert
+        ca_cert: ""
+        # path to client cert, used for TLS authentication (mTLS)
+        client_cert: ""
+        # path to client key, used for TLS authentication (mTLS)
+        client_key: ""
+      # proxy request to a http proxy
+      # default: empty
+      proxy: http://user:pass@localhost:3128
+      # timeout when making http request
+      # default: 5s
+      timeout: 5s
   - id: zabbix trapper
     # forward to zabbix server/zabbix proxy using zabbix trapper item
     zabbix_trapper:
