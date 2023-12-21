@@ -1,5 +1,6 @@
 # Trap2JSON
-Listens to SNMP Trap, converts it to json, and forwards it to zabbix, kafka, mqtt broker, or proxy it to other trap receiver.
+Listens to SNMP Trap, converts it to json, and forwards it to zabbix, kafka,
+mqtt broker, http server or proxy it to other trap receiver.
 Internally it uses snmptrapd to listen to incoming trap message, output it
 to stdout and parse the messages. If you're familiar with how snmptrapd works,
 you can add any configuration supported by snmptrapd.conf. Prior knowledge
@@ -16,6 +17,7 @@ can use this as a solution for your distributed zabbix setup.
   - Kafka
   - MQTT Broker
   - SNMP Trap (like a proxy)
+  - HTTP
   - Zabbix
 - Message filter for each forwarder
   - Decide which messages to drop

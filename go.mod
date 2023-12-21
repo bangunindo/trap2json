@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/Workiva/go-datastructures v1.1.1
+	github.com/carlmjohnson/requests v0.23.5
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/essentialkaos/go-zabbix v1.1.3
 	github.com/expr-lang/expr v1.15.7
@@ -16,7 +17,7 @@ require (
 	github.com/rs/zerolog v1.31.0
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/sleepinggenius2/gosmi v0.4.4
-	github.com/spf13/viper v1.18.1
+	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
 	gopkg.in/guregu/null.v4 v4.0.0
 )
