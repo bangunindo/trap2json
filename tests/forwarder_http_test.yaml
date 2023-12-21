@@ -1,0 +1,11 @@
+logger:
+  level: info
+forwarders:
+  - id: http
+    http:
+      url: http://172.17.0.1:9789
+snmptrapd:
+  auth:
+    enable: true
+    community:
+      - name: public
