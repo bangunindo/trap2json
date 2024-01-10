@@ -17,6 +17,25 @@ prometheus:
 # define number of threads for parsing snmptrapd messages
 # default: number of logical CPUs
 parse_workers: 2
+correlate:
+  # badger, redis, postgres, mysql
+  # badger: in-process database, kind of like sqlite but for kv store
+  #   # persist data to /path/to/db directory
+  #   - badger:///path/to/db
+  #   # store data in RAM, data will be discarded after restart
+  #   # but faster in read/write access
+  #   - badger://
+  # redis: minimum version 6.2.0
+  backend_url: badger://
+  ttl: 30d
+  operation_timeout: 1s
+  workers: 2
+  conditions:
+    - match: ip in [xxxx, yyyy]
+      entities:
+        - source_ip
+        - OidValueString(value_list, ".1.2.3.4", true)
+      clear: OidValueString(value_list, ".1.2.3.4", true) == "normal"
 forwarders:
     # id is used for logging and prometheus label
   - id: print_to_stdout
