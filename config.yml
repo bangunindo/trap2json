@@ -29,7 +29,8 @@ correlate:
   backend_url: badger://
   ttl: 30d
   operation_timeout: 1s
-  workers: 2
+  queue_size: 10000
+  workers: 4
   conditions:
     - match: ip in [xxxx, yyyy]
       entities:

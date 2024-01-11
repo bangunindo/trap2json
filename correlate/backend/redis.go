@@ -16,7 +16,6 @@ type redisdb struct {
 }
 
 func (r *redisdb) Pop(key string) (Data, bool, error) {
-	var data Data
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if r.timeout > 0 {
@@ -33,6 +32,7 @@ func (r *redisdb) Pop(key string) (Data, bool, error) {
 			return Data{}, false, errors.Wrap(err, "failed getting value")
 		}
 	}
+	var data Data
 	err = json.Unmarshal([]byte(val), &data)
 	if err != nil {
 		return Data{}, false, errors.Wrap(err, "failed unmarshalling value")

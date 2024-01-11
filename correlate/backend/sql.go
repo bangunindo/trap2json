@@ -34,7 +34,7 @@ func (s *sqldb) migrate() error {
 		ctx,
 		tx,
 		&tableExists,
-		"select count(*) from information_schema.tables where table_name = 'trap2json_correlate'",
+		"select count(*) > 0 from information_schema.tables where table_name = 'trap2json_correlate'",
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed getting table information")
@@ -60,13 +60,92 @@ create table trap2json_correlate (
 }
 
 func (s *sqldb) Pop(key string) (Data, bool, error) {
-	//TODO implement me
-	panic("implement me")
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if s.timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), s.timeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Data{}, false, errors.Wrap(err, "failed starting transaction")
+	}
+	var data Data
+	switch s.driver {
+	case "pgx":
+		err = sqlscan.Get(ctx, tx, &data, "select id, rts, rtn from trap2json_correlate where key_ = $1 limit 1", key)
+	case "mysql":
+		err = sqlscan.Get(ctx, tx, &data, "select id, rts, rtn from trap2json_correlate where key_ = ? limit 1", key)
+	default:
+		panic(fmt.Sprintf("unexpected driver found %s", s.driver))
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return Data{}, false, nil
+	}
+	if err != nil {
+		return Data{}, false, errors.Wrap(err, "failed getting value")
+	}
+	switch s.driver {
+	case "pgx":
+		_, err = tx.ExecContext(ctx, "delete from trap2json_correlate where key_ = $1", key)
+	case "mysql":
+		_, err = tx.ExecContext(ctx, "delete from trap2json_correlate where key_ = ?", key)
+	default:
+		panic(fmt.Sprintf("unexpected driver found %s", s.driver))
+	}
+	if err != nil {
+		return Data{}, false, errors.Wrap(err, "failed deleting value")
+	}
+	err = tx.Commit()
+	if err != nil {
+		return Data{}, false, errors.Wrap(err, "failed starting transaction")
+	}
+	return data, true, nil
 }
 
 func (s *sqldb) Set(key string, value Data) error {
-	//TODO implement me
-	panic("implement me")
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if s.timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), s.timeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed starting transaction")
+	}
+	switch s.driver {
+	case "pgx":
+		_, err = tx.ExecContext(
+			ctx,
+			`insert into trap2json_correlate(key_, id, rts, rtn) values ($1, $2, $3, $4)
+                   on conflict (key_) do update set id = excluded.id, rts = excluded.rts, rtn = excluded.rtn`,
+			key,
+			value.ID,
+			value.RaisedTimeSeconds,
+			value.RaisedTimeNanos,
+		)
+	case "mysql":
+		_, err = tx.ExecContext(
+			ctx,
+			`insert into trap2json_correlate(key_, id, rts, rtn) values (?, ?, ?, ?)
+                   on duplicate key update id = values(id), rts = values(rts), rtn = values(rtn)`,
+			key,
+			value.ID,
+			value.RaisedTimeSeconds,
+			value.RaisedTimeNanos,
+		)
+	default:
+		panic(fmt.Sprintf("unexpected driver found %s", s.driver))
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed setting value")
+	}
+	return errors.Wrap(tx.Commit(), "failed committing transaction")
 }
 
 func (s *sqldb) Cleanup() error {
@@ -92,7 +171,7 @@ func (s *sqldb) Cleanup() error {
 		panic(fmt.Sprintf("unexpected driver found %s", s.driver))
 	}
 	if err != nil {
-		return errors.Wrap(err, "failed cleanup")
+		return errors.Wrap(err, "failed cleaning up values")
 	}
 	return errors.Wrap(tx.Commit(), "failed committing transaction")
 }
