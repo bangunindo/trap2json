@@ -18,6 +18,8 @@ prometheus:
 # default: number of logical CPUs
 parse_workers: 2
 correlate:
+  # default: false
+  enable: true
   # badger, redis, postgres, mysql
   # badger: in-process database, kind of like sqlite but for kv store
   #   # persist data to /path/to/db directory
@@ -26,14 +28,20 @@ correlate:
   #   # but faster in read/write access
   #   - badger://
   # redis: minimum version 6.2.0
+  # default: badger://
   backend_url: badger://
+  # default: 30d
   ttl: 30d
-  operation_timeout: 1s
+  # default: 0 (no timeout)
+  timeout: 1s
+  # default: 10000
   queue_size: 10000
+  # default: 4
   workers: 4
+  # default: empty
   conditions:
     - match: ip in [xxxx, yyyy]
-      entities:
+      identifiers:
         - source_ip
         - OidValueString(value_list, ".1.2.3.4", true)
       clear: OidValueString(value_list, ".1.2.3.4", true) == "normal"

@@ -12,6 +12,11 @@ type Config struct {
 }
 
 var (
+	SnmpTrapDProcessedBytes = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "trap2json_snmptrapd_processed_bytes",
+		},
+	)
 	SnmpTrapDProcessed = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "trap2json_snmptrapd_processed",
@@ -44,6 +49,40 @@ var (
 			Name: "trap2json_parser_succeeded",
 		},
 		[]string{"worker"},
+	)
+	CorrelateProcessed = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "trap2json_correlate_processed",
+		},
+		[]string{"worker"},
+	)
+	CorrelateSkipped = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "trap2json_correlate_skipped",
+		},
+		[]string{"worker"},
+	)
+	CorrelateFailed = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "trap2json_correlate_failed",
+		},
+		[]string{"worker"},
+	)
+	CorrelateSucceeded = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "trap2json_correlate_succeeded",
+		},
+		[]string{"worker"},
+	)
+	CorrelateQueueFilled = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "trap2json_correlate_queue_filled",
+		},
+	)
+	CorrelateQueueCapacity = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "trap2json_correlate_queue_capacity",
+		},
 	)
 	ForwarderProcessed = promauto.NewCounterVec(
 		prometheus.CounterOpts{

@@ -1,6 +1,7 @@
 package snmp
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -397,6 +398,19 @@ func getOidValue(val []ValueCompiled, oidPrefix string) any {
 }
 
 var Functions = []expr.Option{
+	expr.Function(
+		"SHA256",
+		func(params ...any) (any, error) {
+			p, err := json.Marshal(params)
+			if err != nil {
+				return nil, err
+			}
+			h := sha256.New()
+			h.Write(p)
+			return hex.EncodeToString(h.Sum(nil)), nil
+		},
+		new(func(...any) string),
+	),
 	expr.Function(
 		"MergeMap",
 		func(params ...any) (any, error) {

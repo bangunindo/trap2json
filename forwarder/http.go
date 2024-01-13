@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/carlmjohnson/requests"
 	"github.com/pkg/errors"
 	"net/http"
@@ -59,7 +60,7 @@ type HTTPConfig struct {
 	BasicAuth *HTTPBasicAuth `mapstructure:"basic_auth"`
 	Tls       *Tls
 	Proxy     string
-	Timeout   Duration
+	Timeout   helper.Duration
 }
 
 type HTTP struct {

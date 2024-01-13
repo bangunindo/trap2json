@@ -2,6 +2,7 @@ package forwarder
 
 import (
 	"fmt"
+	"github.com/bangunindo/trap2json/helper"
 	zsend "github.com/essentialkaos/go-zabbix"
 	"github.com/pkg/errors"
 	"strings"
@@ -22,9 +23,9 @@ type ZSAdvancedConfig struct {
 	// for example:
 	// - postgres://user:pass@127.0.0.1:5432/dbname?param1=value1&param2=value2
 	// - mysql://user:pass@127.0.0.1:3306/dbname?param1=value1&param2=value2
-	DBUrl             string   `mapstructure:"db_url"`
-	DBRefreshInterval Duration `mapstructure:"db_refresh_interval"`
-	DBQueryTimeout    Duration `mapstructure:"db_query_timeout"`
+	DBUrl             string          `mapstructure:"db_url"`
+	DBRefreshInterval helper.Duration `mapstructure:"db_refresh_interval"`
+	DBQueryTimeout    helper.Duration `mapstructure:"db_query_timeout"`
 }
 
 func (z *ZSAdvancedConfig) initProxyMap() {

@@ -176,6 +176,7 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	for scanner.Scan() {
 		metrics.SnmpTrapDProcessed.Inc()
 		line := scanner.Bytes()
+		metrics.SnmpTrapDProcessedBytes.Add(float64(len(line)))
 		log.Trace().Bytes("data", line).Msg("received data")
 		idx := bytes.LastIndex(line, magicBegin)
 		if idx < 0 {

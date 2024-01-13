@@ -1,7 +1,9 @@
 package main
 
 import (
+	"github.com/bangunindo/trap2json/correlate"
 	"github.com/bangunindo/trap2json/forwarder"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/logger"
 	"github.com/bangunindo/trap2json/metrics"
 	"github.com/bangunindo/trap2json/snmp"
@@ -10,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 	"runtime"
+	"time"
 )
 
 type config struct {
@@ -18,6 +21,7 @@ type config struct {
 	Forwarders   []forwarder.Config
 	ParseWorkers int `mapstructure:"parse_workers"`
 	Prometheus   metrics.Config
+	Correlate    correlate.Config
 }
 
 func parseConfig(path string) (config, error) {
@@ -30,6 +34,10 @@ func parseConfig(path string) (config, error) {
 	v.SetDefault("snmptrapd.magic_begin", "--TFWDBEGIN--")
 	v.SetDefault("snmptrapd.magic_end", "--TFWDEND--")
 	v.SetDefault("snmptrapd.buffer_size", "64k")
+	v.SetDefault("correlate.backend_url", "badger://")
+	v.SetDefault("correlate.ttl", helper.Duration{Duration: 30 * 24 * time.Hour})
+	v.SetDefault("correlate.queue_size", 10000)
+	v.SetDefault("correlate.workers", 4)
 	v.SetConfigFile(path)
 	err := v.ReadInConfig()
 	if err != nil {

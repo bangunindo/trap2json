@@ -2,13 +2,12 @@ package forwarder
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/Workiva/go-datastructures/queue"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/metrics"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -18,28 +17,11 @@ import (
 	"time"
 )
 
-type Duration struct {
-	time.Duration
-}
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.String())
-}
-
-func (d *Duration) UnmarshalText(b []byte) error {
-	if d == nil {
-		return errors.New("can't unmarshal a nil *Duration")
-	}
-	var err error
-	d.Duration, err = time.ParseDuration(string(b))
-	return err
-}
-
 type AutoRetry struct {
 	Enable     bool
-	MaxRetries int      `mapstructure:"max_retries"`
-	MinDelay   Duration `mapstructure:"min_delay"`
-	MaxDelay   Duration `mapstructure:"max_delay"`
+	MaxRetries int             `mapstructure:"max_retries"`
+	MinDelay   helper.Duration `mapstructure:"min_delay"`
+	MaxDelay   helper.Duration `mapstructure:"max_delay"`
 }
 
 type Config struct {
@@ -51,8 +33,8 @@ type Config struct {
 	// TimeFormat specifies golang time format for casting time related fields to string
 	TimeFormat string `mapstructure:"time_format"`
 	// TimeAsTimezone will cast any time field to specified timezone
-	TimeAsTimezone   string   `mapstructure:"time_as_timezone"`
-	ShutdownWaitTime Duration `mapstructure:"shutdown_wait_time"`
+	TimeAsTimezone   string          `mapstructure:"time_as_timezone"`
+	ShutdownWaitTime helper.Duration `mapstructure:"shutdown_wait_time"`
 	// Filter, JSONFormat utilizes antonmedv/expr expressions
 	Filter        string
 	JSONFormat    string    `mapstructure:"json_format"`

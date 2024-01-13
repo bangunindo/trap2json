@@ -1,6 +1,7 @@
 package forwarder
 
 import (
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/pkg/errors"
 	"time"
@@ -8,7 +9,7 @@ import (
 
 type MockConfig struct {
 	OutChannel chan *snmp.Message
-	Timeout    Duration
+	Timeout    helper.Duration
 }
 
 type Mock struct {

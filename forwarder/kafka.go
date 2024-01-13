@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
@@ -66,8 +67,8 @@ type KafkaConfig struct {
 	Topic        string
 	Tls          *Tls
 	Sasl         *KafkaSasl
-	BatchSize    int      `mapstructure:"batch_size"`
-	BatchTimeout Duration `mapstructure:"batch_timeout"`
+	BatchSize    int             `mapstructure:"batch_size"`
+	BatchTimeout helper.Duration `mapstructure:"batch_timeout"`
 }
 
 const kafkaMaxGoroutine = 10000
