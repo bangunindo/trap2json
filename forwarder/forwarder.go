@@ -2,9 +2,9 @@ package forwarder
 
 import (
 	"context"
-	"github.com/Workiva/go-datastructures/queue"
 	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/metrics"
+	"github.com/bangunindo/trap2json/queue"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
@@ -76,9 +76,12 @@ type Tls struct {
 }
 
 type Forwarder interface {
-	// Send will send the trap message to its corresponding forwarder.
+	// SendChannel will send the trap message to its corresponding forwarder.
 	// Does nothing if the queue buffer is full or forwarder is already closed
-	Send(message *snmp.Message)
+	SendChannel() chan<- *snmp.Message
+	// ReceiveChannel is used inside the forwarder to receive data
+	// from SendChannel
+	ReceiveChannel() <-chan *snmp.Message
 	// Close informs the forwarder to stop processing any new messages
 	Close()
 	// Done informs the caller if forwarder is done processing
@@ -89,7 +92,7 @@ type Base struct {
 	idx             string
 	fwdType         string
 	config          Config
-	queue           *queue.PriorityQueue
+	queue           *queue.Queue[*snmp.Message]
 	ctx             context.Context
 	cancel          context.CancelFunc
 	ctrProcessed    prometheus.Counter
@@ -104,48 +107,12 @@ type Base struct {
 	CompilerConf    snmp.MessageCompiler
 }
 
-// Get returns error only if the queue is closed
-func (b *Base) Get() (*snmp.Message, error) {
-	var msg *snmp.Message
-	for {
-		if b.queue.Disposed() {
-			return nil, queue.ErrDisposed
-		}
-		m := b.queue.Peek()
-		if m == nil {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		} else {
-			msg = m.(*snmp.Message)
-			if msg.Eta().Before(time.Now()) {
-				break
-			} else {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
-		}
-	}
-	if m, err := b.queue.Get(1); err == nil {
-		msg = m[0].(*snmp.Message)
-		return msg, nil
-	} else {
-		return nil, err
-	}
+func (b *Base) SendChannel() chan<- *snmp.Message {
+	return b.queue.SendChannel()
 }
 
-// Send snmp message to forwarder
-func (b *Base) Send(message *snmp.Message) {
-	b.ctrProcessed.Inc()
-	if b.config.QueueSize == 0 || b.queue.Len() < b.config.QueueSize {
-		err := b.queue.Put(message)
-		if err != nil {
-			b.logger.Error().Msg("unexpected error, queue is closed")
-			b.ctrDropped.Inc()
-		}
-	} else {
-		b.logger.Warn().Msg("queue is full, consider increasing queue_size for this forwarder")
-		b.ctrDropped.Inc()
-	}
+func (b *Base) ReceiveChannel() <-chan *snmp.Message {
+	return b.queue.ReceiveChannel()
 }
 
 func (b *Base) Retry(message *snmp.Message, err error) {
@@ -158,7 +125,7 @@ func (b *Base) Retry(message *snmp.Message, err error) {
 		message.SetEta(eta)
 		b.ctrRetried.Inc()
 		b.logger.Debug().Err(err).Msg("retrying to forward trap")
-		b.Send(message)
+		b.SendChannel() <- message
 	} else {
 		b.logger.Warn().Err(err).Msg("failed forwarding trap")
 		b.ctrDropped.Inc()
@@ -166,24 +133,7 @@ func (b *Base) Retry(message *snmp.Message, err error) {
 }
 
 func (b *Base) Close() {
-	go func() {
-		if b.config.ShutdownWaitTime.Duration > 0 {
-			timeout := time.After(b.config.ShutdownWaitTime.Duration)
-		outer:
-			for {
-				select {
-				case <-timeout:
-					break outer
-				default:
-					if b.queue.Empty() {
-						break outer
-					}
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
-		b.queue.Dispose()
-	}()
+	b.queue.Close()
 }
 
 func (b *Base) Done() <-chan struct{} {
@@ -198,7 +148,6 @@ func NewBase(c Config, idx int) Base {
 		idx:     idxStr,
 		fwdType: fwdType,
 		config:  c,
-		queue:   queue.NewPriorityQueue(c.QueueSize, true),
 		ctx:     ctx,
 		cancel:  cancel,
 		ctrProcessed: metrics.ForwarderProcessed.With(prometheus.Labels{
@@ -249,6 +198,18 @@ func NewBase(c Config, idx int) Base {
 			Str("id", c.ID).
 			Logger(),
 	}
+	base.queue = queue.NewQueue[*snmp.Message](
+		base.logger,
+		c.QueueSize,
+		c.ShutdownWaitTime.Duration,
+		nil,
+		queue.Counter{
+			Processed: base.ctrProcessed,
+			Drop:      base.ctrDropped,
+			QueueCap:  base.ctrQueueCap,
+			QueueLen:  base.ctrQueueLen,
+		},
+	)
 	var filterExpr, formatExpr *vm.Program
 	var err error
 	if c.Filter != "" {
@@ -378,7 +339,7 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 		for _, fwd := range forwarders {
 			mCopy := msg.Copy()
 			mCopy.SetEta(time.Now())
-			fwd.Send(&mCopy)
+			fwd.SendChannel() <- &mCopy
 		}
 	}
 	for _, fwd := range forwarders {

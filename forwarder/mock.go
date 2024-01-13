@@ -21,11 +21,7 @@ func (m *Mock) Run() {
 	defer m.logger.Info().Msg("forwarder exited")
 	m.logger.Info().Msg("starting forwarder")
 
-	for {
-		msg, err := m.Get()
-		if err != nil {
-			break
-		}
+	for msg := range m.ReceiveChannel() {
 		msg.Compile(m.CompilerConf)
 		if msg.Skip {
 			m.ctrFiltered.Inc()

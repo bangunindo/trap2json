@@ -17,7 +17,7 @@ func TestQueue(t *testing.T) {
 	q := NewQueue[tType](
 		log.Logger,
 		1,
-		time.Second, time.Second, time.Second,
+		time.Second,
 		nil,
 		Counter{},
 	)

@@ -29,7 +29,6 @@ func (m *item) Compare(other qq.Item) int {
 
 type Counter struct {
 	Processed   prometheus.Counter
-	Succeeded   prometheus.Counter
 	Drop        prometheus.Counter
 	Passthrough prometheus.Counter
 	QueueCap    prometheus.Gauge
@@ -74,10 +73,6 @@ func (q *Queue[T]) sendWorker() {
 						q.counter.Passthrough.Inc()
 					}
 					q.passthroughChan <- m
-				}
-			} else {
-				if q.counter.Succeeded != nil {
-					q.counter.Succeeded.Inc()
 				}
 			}
 		} else {
@@ -176,7 +171,7 @@ func (q *Queue[T]) Done() <-chan struct{} {
 func NewQueue[T Item](
 	logger zerolog.Logger,
 	size int,
-	minDelay, maxDelay, flushTimeout time.Duration,
+	flushTimeout time.Duration,
 	passthroughChan chan T,
 	counter Counter,
 ) *Queue[T] {
@@ -185,10 +180,8 @@ func NewQueue[T Item](
 		logger:          logger,
 		size:            size,
 		sendChan:        make(chan T, 10),
-		recvChan:        make(chan T, 10),
+		recvChan:        make(chan T),
 		passthroughChan: passthroughChan,
-		minDelay:        minDelay,
-		maxDelay:        maxDelay,
 		flushTimeout:    flushTimeout,
 		counter:         counter,
 	}

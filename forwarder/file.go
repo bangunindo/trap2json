@@ -34,11 +34,7 @@ func (f *File) Run() {
 		return
 	}
 	defer fOut.Close()
-	for {
-		m, err := f.Get()
-		if err != nil {
-			break
-		}
+	for m := range f.ReceiveChannel() {
 		m.Compile(f.CompilerConf)
 		if m.Skip {
 			f.ctrFiltered.Inc()

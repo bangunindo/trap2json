@@ -147,11 +147,7 @@ func (k *Kafka) Run() {
 	}
 	defer producer.Close()
 
-	for {
-		m, err := k.Get()
-		if err != nil {
-			break
-		}
+	for m := range k.ReceiveChannel() {
 		m.Compile(k.CompilerConf)
 		if m.Skip {
 			k.ctrFiltered.Inc()

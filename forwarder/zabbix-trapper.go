@@ -110,11 +110,7 @@ func (z *ZabbixTrapper) Run() {
 	defer z.cancel()
 	defer z.logger.Info().Msg("forwarder exited")
 	z.logger.Info().Msg("starting forwarder")
-	for {
-		m, err := z.Get()
-		if err != nil {
-			break
-		}
+	for m := range z.ReceiveChannel() {
 		m.Compile(z.CompilerConf)
 		if m.Skip {
 			z.ctrFiltered.Inc()

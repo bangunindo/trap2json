@@ -171,11 +171,7 @@ func (s *SNMPTrap) Run() {
 		go s.runWorker()
 	}
 	baseCmd := s.baseBuilder()
-	for {
-		m, err := s.Get()
-		if err != nil {
-			break
-		}
+	for m := range s.ReceiveChannel() {
 		m.Compile(s.CompilerConf)
 		if m.Skip {
 			s.ctrFiltered.Inc()

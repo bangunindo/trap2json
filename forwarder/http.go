@@ -114,11 +114,7 @@ func (h *HTTP) Run() {
 	}
 	builder = builder.Transport(transport)
 
-	for {
-		m, err := h.Get()
-		if err != nil {
-			break
-		}
+	for m := range h.ReceiveChannel() {
 		m.Compile(h.CompilerConf)
 		if m.Skip {
 			h.ctrFiltered.Inc()
