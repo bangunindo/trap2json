@@ -117,7 +117,7 @@ func (b *Base) Get() (*snmp.Message, error) {
 			continue
 		} else {
 			msg = m.(*snmp.Message)
-			if msg.Eta.Before(time.Now()) {
+			if msg.Eta().Before(time.Now()) {
 				break
 			} else {
 				time.Sleep(10 * time.Millisecond)
@@ -155,7 +155,7 @@ func (b *Base) Retry(message *snmp.Message, err error) {
 			b.config.AutoRetry.MaxDelay.Duration,
 		)
 		message.Retries++
-		message.Eta = eta
+		message.SetEta(eta)
 		b.ctrRetried.Inc()
 		b.logger.Debug().Err(err).Msg("retrying to forward trap")
 		b.Send(message)
@@ -377,7 +377,7 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 	for msg := range messageChan {
 		for _, fwd := range forwarders {
 			mCopy := msg.Copy()
-			mCopy.Eta = time.Now()
+			mCopy.SetEta(time.Now())
 			fwd.Send(&mCopy)
 		}
 	}

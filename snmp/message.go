@@ -591,11 +591,19 @@ type Message struct {
 	Values            []Value     `json:"values"`
 
 	Retries         int             `json:"-"`
-	Eta             time.Time       `json:"-"`
 	Skip            bool            `json:"-"`
 	MessageCompiled MessageCompiled `json:"-"`
 	MessageJSON     []byte          `json:"-"`
+	eta             time.Time
 	compiled        bool
+}
+
+func (m *Message) Eta() time.Time {
+	return m.eta
+}
+
+func (m *Message) SetEta(eta time.Time) {
+	m.eta = eta
 }
 
 func (m *Message) Copy() Message {
@@ -686,9 +694,9 @@ func (m *Message) ComputeEta(minDelay, maxDelay time.Duration) time.Time {
 
 func (m *Message) Compare(other queue.Item) int {
 	otherM := other.(*Message)
-	if otherM.Eta.Equal(m.Eta) {
+	if otherM.Eta().Equal(m.Eta()) {
 		return 0
-	} else if otherM.Eta.After(m.Eta) {
+	} else if otherM.Eta().After(m.Eta()) {
 		return -1
 	} else {
 		return 1
