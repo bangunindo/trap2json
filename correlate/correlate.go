@@ -3,6 +3,7 @@ package correlate
 import (
 	"github.com/bangunindo/trap2json/correlate/backend"
 	"github.com/bangunindo/trap2json/metrics"
+	"github.com/bangunindo/trap2json/queue"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/prometheus/client_golang/prometheus"
 	"strconv"
@@ -10,18 +11,17 @@ import (
 )
 
 type Correlate struct {
+	backend backend.Backend
+	wg      *sync.WaitGroup
+	queue   queue.Queue[*snmp.Message]
 }
 
-func CorrelateWorker(
+func (c *Correlate) CorrelateWorker(
 	i int,
-	wg *sync.WaitGroup,
-	backend backend.Backend,
-	messageIn <-chan snmp.Message,
-	messageOut chan<- snmp.Message,
 ) {
-	defer wg.Done()
-	processed := metrics.CorrelateProcessed.With(prometheus.Labels{"worker": strconv.Itoa(i)})
-	succeeded := metrics.CorrelateSucceeded.With(prometheus.Labels{"worker": strconv.Itoa(i)})
-	skipped := metrics.CorrelateSkipped.With(prometheus.Labels{"worker": strconv.Itoa(i)})
-	failed := metrics.CorrelateFailed.With(prometheus.Labels{"worker": strconv.Itoa(i)})
+	defer c.wg.Done()
+	_ = metrics.CorrelateProcessed.With(prometheus.Labels{"worker": strconv.Itoa(i)})
+	_ = metrics.CorrelateSucceeded.With(prometheus.Labels{"worker": strconv.Itoa(i)})
+	_ = metrics.CorrelateSkipped.With(prometheus.Labels{"worker": strconv.Itoa(i)})
+	_ = metrics.CorrelateFailed.With(prometheus.Labels{"worker": strconv.Itoa(i)})
 }

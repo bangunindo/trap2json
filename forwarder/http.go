@@ -116,12 +116,12 @@ func (h *HTTP) Run() {
 
 	for m := range h.ReceiveChannel() {
 		m.Compile(h.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			h.ctrFiltered.Inc()
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), h.config.HTTP.Timeout.Duration)
-		if err := builder.BodyBytes(m.MessageJSON).Fetch(ctx); err != nil {
+		if err := builder.BodyBytes(m.Metadata.MessageJSON).Fetch(ctx); err != nil {
 			cancel()
 			h.Retry(m, err)
 		} else {

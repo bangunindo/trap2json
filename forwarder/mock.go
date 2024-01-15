@@ -23,7 +23,7 @@ func (m *Mock) Run() {
 
 	for msg := range m.ReceiveChannel() {
 		msg.Compile(m.CompilerConf)
-		if msg.Skip {
+		if msg.Metadata.Skip {
 			m.ctrFiltered.Inc()
 			continue
 		}

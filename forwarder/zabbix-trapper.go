@@ -112,7 +112,7 @@ func (z *ZabbixTrapper) Run() {
 	z.logger.Info().Msg("starting forwarder")
 	for m := range z.ReceiveChannel() {
 		m.Compile(z.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			z.ctrFiltered.Inc()
 			continue
 		}
@@ -143,9 +143,9 @@ func (z *ZabbixTrapper) Run() {
 			z.ctrDropped.Inc()
 			continue
 		}
-		item := c.Add(z.config.ZabbixTrapper.ItemKey, string(m.MessageJSON))
-		item.Clock = m.Time.Unix()
-		item.NS = m.Time.Nanosecond()
+		item := c.Add(z.config.ZabbixTrapper.ItemKey, string(m.Metadata.MessageJSON))
+		item.Clock = m.Payload.Time.Unix()
+		item.NS = m.Payload.Time.Nanosecond()
 		z.logger.Trace().Str("address", address).Str("hostname", hostname).Msg("sending to zabbix")
 		if _, err = c.Send(); err != nil {
 			z.Retry(m, err)

@@ -30,6 +30,8 @@ correlate:
   # redis: minimum version 6.2.0
   # default: badger://
   backend_url: badger://
+  time_format: "2006-01-02T15:04:05.999999999Z07:00"
+  time_as_timezone: Asia/Jakarta
   # default: 30d
   ttl: 30d
   # default: 0 (no timeout)

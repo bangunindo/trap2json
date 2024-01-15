@@ -111,6 +111,7 @@ func (q *Queue[T]) ReceiveChannel() <-chan T {
 
 func (q *Queue[T]) receiveWorker() {
 	var msg *item
+outer:
 	for {
 		if q.q.Disposed() {
 			break
@@ -119,14 +120,14 @@ func (q *Queue[T]) receiveWorker() {
 			m := q.q.Peek()
 			if m == nil {
 				time.Sleep(10 * time.Millisecond)
-				continue
+				continue outer
 			} else {
 				msg = m.(*item)
 				if msg.i.Eta().Before(time.Now()) {
 					break
 				} else {
 					time.Sleep(10 * time.Millisecond)
-					continue
+					continue outer
 				}
 			}
 		}

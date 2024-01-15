@@ -88,8 +88,14 @@ func TestRun(t *testing.T) {
 		if cleanShutdown {
 			msg := <-outChan
 			var jsonActual map[string]any
-			err = json.Unmarshal(msg.MessageJSON, &jsonActual)
+			err = json.Unmarshal(msg.Metadata.MessageJSON, &jsonActual)
 			assert.NoError(t, err)
+			timeActual, ok := jsonActual["time"]
+			assert.True(t, ok)
+			if assert.IsType(t, "", timeActual) {
+				_, err = time.Parse(time.RFC3339, timeActual.(string))
+				assert.NoError(t, err)
+			}
 			delete(jsonExpected, "time")
 			delete(jsonActual, "time")
 			assert.Equal(t, jsonExpected, jsonActual)

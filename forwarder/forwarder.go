@@ -86,6 +86,8 @@ type Forwarder interface {
 	Close()
 	// Done informs the caller if forwarder is done processing
 	Done() <-chan struct{}
+	// Config returns the forwarder config
+	Config() Config
 }
 
 type Base struct {
@@ -107,6 +109,10 @@ type Base struct {
 	CompilerConf    snmp.MessageCompiler
 }
 
+func (b *Base) Config() Config {
+	return b.config
+}
+
 func (b *Base) SendChannel() chan<- *snmp.Message {
 	return b.queue.SendChannel()
 }
@@ -116,12 +122,12 @@ func (b *Base) ReceiveChannel() <-chan *snmp.Message {
 }
 
 func (b *Base) Retry(message *snmp.Message, err error) {
-	if b.config.AutoRetry.Enable && message.Retries < b.config.AutoRetry.MaxRetries {
+	if b.config.AutoRetry.Enable && message.Metadata.Retries < b.config.AutoRetry.MaxRetries {
 		eta := message.ComputeEta(
 			b.config.AutoRetry.MinDelay.Duration,
 			b.config.AutoRetry.MaxDelay.Duration,
 		)
-		message.Retries++
+		message.Metadata.Retries++
 		message.SetEta(eta)
 		b.ctrRetried.Inc()
 		b.logger.Debug().Err(err).Msg("retrying to forward trap")
@@ -213,7 +219,7 @@ func NewBase(c Config, idx int) Base {
 	var filterExpr, formatExpr *vm.Program
 	var err error
 	if c.Filter != "" {
-		opts := []expr.Option{expr.AsBool(), expr.Env(snmp.MessageCompiled{})}
+		opts := []expr.Option{expr.AsBool(), expr.Env(snmp.Payload{})}
 		opts = append(opts, snmp.Functions...)
 		filterExpr, err = expr.Compile(
 			c.Filter,
@@ -224,7 +230,7 @@ func NewBase(c Config, idx int) Base {
 		}
 	}
 	if c.JSONFormat != "" {
-		opts := []expr.Option{expr.AsKind(reflect.Map), expr.Env(snmp.MessageCompiled{})}
+		opts := []expr.Option{expr.AsKind(reflect.Map), expr.Env(snmp.Payload{})}
 		opts = append(opts, snmp.Functions...)
 		formatExpr, err = expr.Compile(
 			c.JSONFormat,
@@ -235,24 +241,10 @@ func NewBase(c Config, idx int) Base {
 		}
 	}
 	base.CompilerConf = snmp.MessageCompiler{
-		TimeFormat:     c.TimeFormat,
-		TimeAsTimezone: c.TimeAsTimezone,
-		Filter:         filterExpr,
-		JSONFormat:     formatExpr,
-		Logger:         base.logger,
+		Filter:     filterExpr,
+		JSONFormat: formatExpr,
+		Logger:     base.logger,
 	}
-	// prometheus exporter for queue length
-	go func() {
-		base.ctrQueueCap.Set(float64(c.QueueSize))
-		for {
-			select {
-			case <-time.After(time.Second):
-				base.ctrQueueLen.Set(float64(base.queue.Len()))
-			case <-base.ctx.Done():
-				return
-			}
-		}
-	}()
 	return base
 }
 
@@ -338,6 +330,8 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 	for msg := range messageChan {
 		for _, fwd := range forwarders {
 			mCopy := msg.Copy()
+			mCopy.Metadata.TimeFormat = fwd.Config().TimeFormat
+			mCopy.Metadata.TimeAsTimezone = fwd.Config().TimeAsTimezone
 			mCopy.SetEta(time.Now())
 			fwd.SendChannel() <- &mCopy
 		}

@@ -53,11 +53,11 @@ func (m *MQTT) Run() {
 	defer client.Disconnect(10_000)
 	for msg := range m.ReceiveChannel() {
 		msg.Compile(m.CompilerConf)
-		if msg.Skip {
+		if msg.Metadata.Skip {
 			m.ctrFiltered.Inc()
 			continue
 		}
-		if t := client.Publish(m.config.MQTT.Topic, m.config.MQTT.Qos, false, msg.MessageJSON); t.Wait() &&
+		if t := client.Publish(m.config.MQTT.Topic, m.config.MQTT.Qos, false, msg.Metadata.MessageJSON); t.Wait() &&
 			t.Error() != nil {
 			m.Retry(msg, t.Error())
 		} else {

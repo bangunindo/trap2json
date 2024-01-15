@@ -148,14 +148,15 @@ func (k *Kafka) Run() {
 	defer producer.Close()
 
 	for m := range k.ReceiveChannel() {
+		m := m
 		m.Compile(k.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			k.ctrFiltered.Inc()
 			continue
 		}
 		var key []byte
 		if k.keyFieldTemplate != nil {
-			if res, err := expr.Run(k.keyFieldTemplate, m.MessageCompiled); err == nil {
+			if res, err := expr.Run(k.keyFieldTemplate, m.Payload); err == nil {
 				switch v := res.(type) {
 				case string:
 					key = []byte(v)
@@ -181,7 +182,7 @@ func (k *Kafka) Run() {
 				context.Background(),
 				kafka.Message{
 					Key:   key,
-					Value: m.MessageJSON,
+					Value: m.Metadata.MessageJSON,
 				},
 			); err != nil {
 				k.Retry(m, err)
@@ -202,7 +203,7 @@ func NewKafka(c Config, idx int) Forwarder {
 	if fwd.config.Kafka.KeyField != "" {
 		fwd.keyFieldTemplate, err = expr.Compile(
 			fwd.config.Kafka.KeyField,
-			expr.Env(snmp.MessageCompiled{}),
+			expr.Env(snmp.Payload{}),
 		)
 		if err != nil {
 			fwd.logger.Fatal().Err(err).Msg("failed compiling kafka.key_field expression")

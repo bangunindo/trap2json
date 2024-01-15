@@ -10,8 +10,9 @@ require (
 	github.com/essentialkaos/go-zabbix v1.1.3
 	github.com/expr-lang/expr v1.15.8
 	github.com/georgysavva/scany/v2 v2.1.0
+	github.com/go-json-experiment/json v0.0.0-20231102232822-2e55bd4e08b0
 	github.com/go-sql-driver/mysql v1.7.1
-	github.com/jackc/pgx/v5 v5.5.1
+	github.com/jackc/pgx/v5 v5.5.2
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.18.0
@@ -21,7 +22,6 @@ require (
 	github.com/sleepinggenius2/gosmi v0.4.4
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
-	gopkg.in/guregu/null.v4 v4.0.0
 )
 
 require (

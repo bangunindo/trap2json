@@ -18,7 +18,7 @@ type Condition struct {
 func parseCondition(conf ConditionConfig) (*Condition, error) {
 	var cond Condition
 	var err error
-	opts := []expr.Option{expr.Env(snmp.MessageCompiled{})}
+	opts := []expr.Option{expr.Env(snmp.Payload{})}
 	opts = append(opts, snmp.Functions...)
 	boolOpts := append(opts, expr.AsBool())
 	cond.Match, err = expr.Compile(conf.Match, boolOpts...)

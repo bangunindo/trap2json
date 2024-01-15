@@ -36,11 +36,11 @@ func (f *File) Run() {
 	defer fOut.Close()
 	for m := range f.ReceiveChannel() {
 		m.Compile(f.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			f.ctrFiltered.Inc()
 			continue
 		}
-		mJson := append(m.MessageJSON, []byte("\n")...)
+		mJson := append(m.Metadata.MessageJSON, []byte("\n")...)
 		if _, err = fOut.Write(mJson); err != nil {
 			f.Retry(m, err)
 		} else {

@@ -171,7 +171,7 @@ func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupR
 	if z.conf.Advanced != nil {
 		switch strategy {
 		case LookupFromOID:
-			for _, v := range m.Values {
+			for _, v := range m.Payload.Values {
 				if v.HasOIDPrefix(z.conf.OIDLookup) {
 					if vStr, ok := v.Value.(string); ok {
 						return z.lookupByHostname(vStr)
@@ -179,18 +179,18 @@ func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupR
 				}
 			}
 		case LookupFromAgentAddress:
-			if m.AgentAddress.Valid {
-				return z.lookupByAddress(m.AgentAddress.String)
+			if m.Payload.AgentAddress != nil {
+				return z.lookupByAddress(*m.Payload.AgentAddress)
 			}
 		case LookupFromSourceAddress:
-			if m.SrcAddress != "" {
-				return z.lookupByAddress(m.SrcAddress)
+			if m.Payload.SrcAddress != "" {
+				return z.lookupByAddress(m.Payload.SrcAddress)
 			}
 		}
 	} else {
 		switch strategy {
 		case LookupFromOID:
-			for _, v := range m.Values {
+			for _, v := range m.Payload.Values {
 				if v.HasOIDPrefix(z.conf.OIDLookup) {
 					if vStr, ok := v.Value.(string); ok {
 						return LookupResult{
@@ -200,15 +200,15 @@ func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupR
 				}
 			}
 		case LookupFromAgentAddress:
-			if m.AgentAddress.Valid {
+			if m.Payload.AgentAddress != nil {
 				return LookupResult{
-					Hostname: m.AgentAddress.String,
+					Hostname: *m.Payload.AgentAddress,
 				}, nil
 			}
 		case LookupFromSourceAddress:
-			if m.SrcAddress != "" {
+			if m.Payload.SrcAddress != "" {
 				return LookupResult{
-					Hostname: m.SrcAddress,
+					Hostname: m.Payload.SrcAddress,
 				}, nil
 			}
 		}
