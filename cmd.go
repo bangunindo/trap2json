@@ -147,7 +147,7 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	}
 
 	parseChan := make(chan []byte)
-	forwarderChan := make(chan snmp.Message)
+	forwarderChan := make(chan *snmp.Message)
 	parseWg := new(sync.WaitGroup)
 	forwarderWg := new(sync.WaitGroup)
 	// spawn parser workers

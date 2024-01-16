@@ -22,3 +22,10 @@ func (d *Duration) UnmarshalText(b []byte) error {
 	d.Duration, err = time.ParseDuration(string(b))
 	return err
 }
+
+type AutoRetry struct {
+	Enable     bool
+	MaxRetries int      `mapstructure:"max_retries"`
+	MinDelay   Duration `mapstructure:"min_delay"`
+	MaxDelay   Duration `mapstructure:"max_delay"`
+}

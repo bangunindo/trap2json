@@ -17,12 +17,19 @@ prometheus:
 # define number of threads for parsing snmptrapd messages
 # default: number of logical CPUs
 parse_workers: 2
+# correlate is a process to correlate/match raised & cleared notifications.
+# snmptrap is usually used for alarms on network devices, and those devices
+# usually send a trap when an alarm happened, and another trap when the alarm
+# doesn't happen anymore. this module will check the previous raise alarm
+# and inject information on clear alarm on how long the alarm has happened.
+# this will add some latencies to the overall forwarding scheme
 correlate:
   # default: false
   enable: true
-  # badger, redis, postgres, mysql
+  # possible scheme: badger, redis, postgres, mysql
   # badger: in-process database, kind of like sqlite but for kv store
-  #   # persist data to /path/to/db directory
+  #   # persist data to /path/to/db directory, don't forget to mount
+  #   # this directory as docker volume
   #   - badger:///path/to/db
   #   # store data in RAM, data will be discarded after restart
   #   # but faster in read/write access
@@ -30,19 +37,43 @@ correlate:
   # redis: minimum version 6.2.0
   # default: badger://
   backend_url: badger://
-  time_format: "2006-01-02T15:04:05.999999999Z07:00"
-  time_as_timezone: Asia/Jakarta
+  # specify how long you will keep data that doesn't have its clear counterpart
+  # if the clear event arrived, it will be automatically deleted
   # default: 30d
   ttl: 30d
+  # define how long should a forwarder wait for its queue to flush during a shutdown event
+  # default: 5s
+  shutdown_wait_time: 0s
+  # specify timeout operation for the backend, ignored for badger backend
   # default: 0 (no timeout)
   timeout: 1s
+  # specify queue size for the correlate worker, adjusting this for
+  # badger backend doesn't really make sense since it's on the same process.
+  # when the queue is full, it goes straight to forwarders without any correlation
+  # process happening
   # default: 10000
   queue_size: 10000
+  # define number of threads for the correlate process
   # default: 4
   workers: 4
+  # be careful when enabling auto_retry, your messages will have delay if
+  # the backend has errors
+  auto_retry:
+    # default: false
+    enable: true
+    # default: 10
+    max_retries: 10
+    # default: 1s
+    min_delay: 1s
+    # default: 1h
+    max_delay: 1h
+  # define conditions to match a specific trap, it's evaluated in order.
+  # if no condition matches, no correlation process will be done
   # default: empty
   conditions:
     - match: ip in [xxxx, yyyy]
+      # identifiers are used as a way to identify if the alarm points to the same event.
+      # it will be hashed internally, and stored at the backend
       identifiers:
         - source_ip
         - OidValueString(value_list, ".1.2.3.4", true)

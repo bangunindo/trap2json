@@ -17,13 +17,6 @@ import (
 	"time"
 )
 
-type AutoRetry struct {
-	Enable     bool
-	MaxRetries int             `mapstructure:"max_retries"`
-	MinDelay   helper.Duration `mapstructure:"min_delay"`
-	MaxDelay   helper.Duration `mapstructure:"max_delay"`
-}
-
 type Config struct {
 	// ID identifies forwarder name, also used for prometheus labelling
 	ID string
@@ -37,8 +30,8 @@ type Config struct {
 	ShutdownWaitTime helper.Duration `mapstructure:"shutdown_wait_time"`
 	// Filter, JSONFormat utilizes antonmedv/expr expressions
 	Filter        string
-	JSONFormat    string    `mapstructure:"json_format"`
-	AutoRetry     AutoRetry `mapstructure:"auto_retry"`
+	JSONFormat    string           `mapstructure:"json_format"`
+	AutoRetry     helper.AutoRetry `mapstructure:"auto_retry"`
 	Mock          *MockConfig
 	File          *FileConfig
 	Kafka         *KafkaConfig
@@ -128,7 +121,7 @@ func (b *Base) Retry(message *snmp.Message, err error) {
 			b.config.AutoRetry.MaxDelay.Duration,
 		)
 		message.Metadata.Retries++
-		message.SetEta(eta)
+		message.Metadata.Eta = eta
 		b.ctrRetried.Inc()
 		b.logger.Debug().Err(err).Msg("retrying to forward trap")
 		b.Send(message)
@@ -248,7 +241,7 @@ func NewBase(c Config, idx int) Base {
 	return base
 }
 
-func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Message) {
+func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan *snmp.Message) {
 	defer wg.Done()
 	var forwarders []Forwarder
 	if len(c) == 0 {
@@ -330,9 +323,11 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 	for msg := range messageChan {
 		for _, fwd := range forwarders {
 			mCopy := msg.Copy()
-			mCopy.Metadata.TimeFormat = fwd.Config().TimeFormat
-			mCopy.Metadata.TimeAsTimezone = fwd.Config().TimeAsTimezone
-			mCopy.SetEta(time.Now())
+			mCopy.Metadata = snmp.Metadata{
+				Eta:            time.Now(),
+				TimeAsTimezone: fwd.Config().TimeAsTimezone,
+				TimeFormat:     fwd.Config().TimeFormat,
+			}
 			fwd.Send(&mCopy)
 		}
 	}

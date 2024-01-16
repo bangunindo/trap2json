@@ -12,6 +12,7 @@ require (
 	github.com/georgysavva/scany/v2 v2.1.0
 	github.com/go-json-experiment/json v0.0.0-20231102232822-2e55bd4e08b0
 	github.com/go-sql-driver/mysql v1.7.1
+	github.com/google/uuid v1.4.0
 	github.com/jackc/pgx/v5 v5.5.2
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pkg/errors v0.9.1

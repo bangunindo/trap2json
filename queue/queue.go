@@ -42,7 +42,7 @@ type Queue[T Item] struct {
 	logger          zerolog.Logger
 	size            int
 	sendChan        chan T
-	passthroughChan chan T
+	passthroughChan chan<- T
 	recvChan        chan T
 	minDelay        time.Duration
 	maxDelay        time.Duration
@@ -173,7 +173,7 @@ func NewQueue[T Item](
 	logger zerolog.Logger,
 	size int,
 	flushTimeout time.Duration,
-	passthroughChan chan T,
+	passthroughChan chan<- T,
 	counter Counter,
 ) *Queue[T] {
 	q := &Queue[T]{

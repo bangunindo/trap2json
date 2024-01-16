@@ -50,29 +50,30 @@ var (
 		},
 		[]string{"worker"},
 	)
-	CorrelateProcessed = promauto.NewCounterVec(
+	CorrelateProcessed = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "trap2json_correlate_processed",
 		},
-		[]string{"worker"},
 	)
-	CorrelateSkipped = promauto.NewCounterVec(
+	CorrelateSkipped = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "trap2json_correlate_skipped",
 		},
-		[]string{"worker"},
 	)
-	CorrelateFailed = promauto.NewCounterVec(
+	CorrelateFailed = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "trap2json_correlate_failed",
 		},
-		[]string{"worker"},
 	)
-	CorrelateSucceeded = promauto.NewCounterVec(
+	CorrelateRetried = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "trap2json_correlate_retried",
+		},
+	)
+	CorrelateSucceeded = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "trap2json_correlate_succeeded",
 		},
-		[]string{"worker"},
 	)
 	CorrelateQueueFilled = promauto.NewGauge(
 		prometheus.GaugeOpts{

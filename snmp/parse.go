@@ -216,7 +216,7 @@ func ParserWorker(
 	i int,
 	wg *sync.WaitGroup,
 	parseChan <-chan []byte,
-	messageChan chan<- Message,
+	messageChan chan<- *Message,
 ) {
 	defer wg.Done()
 	processed := metrics.ParserProcessed.With(prometheus.Labels{"worker": strconv.Itoa(i)})
@@ -229,7 +229,8 @@ func ParserWorker(
 			log.Debug().Err(err).Str("data", string(raw)).Msg("message parsing failed")
 			dropped.Inc()
 		} else {
-			messageChan <- msg
+			msg.Metadata.Eta = time.Now()
+			messageChan <- &msg
 			succeeded.Inc()
 		}
 	}

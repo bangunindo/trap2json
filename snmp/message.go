@@ -262,25 +262,33 @@ type MessageCompiler struct {
 	Logger     zerolog.Logger
 }
 
+type Correlate struct {
+	ID              string          `json:"id" expr:"id"`
+	RaisedTime      time.Time       `json:"raised_time" expr:"raised_time"`
+	Duration        helper.Duration `json:"duration" expr:"duration"`
+	DurationSeconds float64         `json:"duration_seconds" expr:"duration_seconds"`
+}
+
 type Payload struct {
-	Time              time.Time `json:"time" expr:"time"`
-	UptimeSeconds     *float64  `json:"uptime_seconds" expr:"uptime_seconds"`
-	SrcAddress        string    `json:"src_address" expr:"src_address"`
-	SrcPort           int       `json:"src_port" expr:"src_port"`
-	DstAddress        string    `json:"dst_address" expr:"dst_address"`
-	DstPort           int       `json:"dst_port" expr:"dst_port"`
-	AgentAddress      *string   `json:"agent_address" expr:"agent_address"`
-	PDUVersion        string    `json:"pdu_version" expr:"pdu_version"`
-	SNMPVersion       string    `json:"snmp_version" expr:"snmp_version"`
-	Community         *string   `json:"community" expr:"community"`
-	EnterpriseOID     *string   `json:"enterprise_oid" expr:"enterprise_oid"`
-	EnterpriseMIBName *string   `json:"enterprise_mib_name" expr:"enterprise_mib_name"`
-	User              *string   `json:"user" expr:"user"`
-	Context           *string   `json:"context" expr:"context"`
-	Description       *string   `json:"description" expr:"description"`
-	TrapType          *int64    `json:"trap_type" expr:"trap_type"`
-	TrapSubType       *int64    `json:"trap_sub_type" expr:"trap_sub_type"`
-	Values            []Value   `json:"values" expr:"value_list"`
+	Time              time.Time  `json:"time" expr:"time"`
+	UptimeSeconds     *float64   `json:"uptime_seconds" expr:"uptime_seconds"`
+	SrcAddress        string     `json:"src_address" expr:"src_address"`
+	SrcPort           int        `json:"src_port" expr:"src_port"`
+	DstAddress        string     `json:"dst_address" expr:"dst_address"`
+	DstPort           int        `json:"dst_port" expr:"dst_port"`
+	AgentAddress      *string    `json:"agent_address" expr:"agent_address"`
+	PDUVersion        string     `json:"pdu_version" expr:"pdu_version"`
+	SNMPVersion       string     `json:"snmp_version" expr:"snmp_version"`
+	Community         *string    `json:"community" expr:"community"`
+	EnterpriseOID     *string    `json:"enterprise_oid" expr:"enterprise_oid"`
+	EnterpriseMIBName *string    `json:"enterprise_mib_name" expr:"enterprise_mib_name"`
+	User              *string    `json:"user" expr:"user"`
+	Context           *string    `json:"context" expr:"context"`
+	Description       *string    `json:"description" expr:"description"`
+	TrapType          *int64     `json:"trap_type" expr:"trap_type"`
+	TrapSubType       *int64     `json:"trap_sub_type" expr:"trap_sub_type"`
+	Values            []Value    `json:"values" expr:"value_list"`
+	Correlate         *Correlate `json:"correlate" expr:"correlate"`
 }
 
 type Metadata struct {
@@ -300,10 +308,6 @@ type Message struct {
 
 func (m *Message) Eta() time.Time {
 	return m.Metadata.Eta
-}
-
-func (m *Message) SetEta(eta time.Time) {
-	m.Metadata.Eta = eta
 }
 
 // Copy is only a shallow copy, only the metadata is different between messages
