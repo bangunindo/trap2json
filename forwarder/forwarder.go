@@ -76,9 +76,9 @@ type Tls struct {
 }
 
 type Forwarder interface {
-	// SendChannel will send the trap message to its corresponding forwarder.
+	// Send will send the trap message to its corresponding forwarder.
 	// Does nothing if the queue buffer is full or forwarder is already closed
-	SendChannel() chan<- *snmp.Message
+	Send(*snmp.Message)
 	// ReceiveChannel is used inside the forwarder to receive data
 	// from SendChannel
 	ReceiveChannel() <-chan *snmp.Message
@@ -113,8 +113,8 @@ func (b *Base) Config() Config {
 	return b.config
 }
 
-func (b *Base) SendChannel() chan<- *snmp.Message {
-	return b.queue.SendChannel()
+func (b *Base) Send(m *snmp.Message) {
+	b.queue.SendChannel() <- m
 }
 
 func (b *Base) ReceiveChannel() <-chan *snmp.Message {
@@ -131,7 +131,7 @@ func (b *Base) Retry(message *snmp.Message, err error) {
 		message.SetEta(eta)
 		b.ctrRetried.Inc()
 		b.logger.Debug().Err(err).Msg("retrying to forward trap")
-		b.SendChannel() <- message
+		b.Send(message)
 	} else {
 		b.logger.Warn().Err(err).Msg("failed forwarding trap")
 		b.ctrDropped.Inc()
@@ -333,7 +333,7 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 			mCopy.Metadata.TimeFormat = fwd.Config().TimeFormat
 			mCopy.Metadata.TimeAsTimezone = fwd.Config().TimeAsTimezone
 			mCopy.SetEta(time.Now())
-			fwd.SendChannel() <- &mCopy
+			fwd.Send(&mCopy)
 		}
 	}
 	for _, fwd := range forwarders {

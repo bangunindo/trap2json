@@ -1,7 +1,7 @@
 package helper
 
 import (
-	"encoding/json"
+	"github.com/go-json-experiment/json"
 	"github.com/pkg/errors"
 	"time"
 )

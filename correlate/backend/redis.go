@@ -2,7 +2,7 @@ package backend
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/go-json-experiment/json"
 	"github.com/pkg/errors"
 	"github.com/redis/go-redis/v9"
 	"net/url"

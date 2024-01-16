@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/bangunindo/trap2json/logger"
 	"github.com/bangunindo/trap2json/snmp"
+	"github.com/go-json-experiment/json"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"io"

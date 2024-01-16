@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
+	"github.com/go-json-experiment/json"
 	"github.com/pkg/errors"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
@@ -161,7 +161,7 @@ func (k *Kafka) Run() {
 				case string:
 					key = []byte(v)
 				default:
-					key, err = json.Marshal(v)
+					key, err = json.Marshal(v, json.Deterministic(true))
 					if string(key) == "null" {
 						key = nil
 					}

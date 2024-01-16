@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"encoding/json"
+	"github.com/go-json-experiment/json"
 	"github.com/pkg/errors"
 	"net/url"
 	"time"
