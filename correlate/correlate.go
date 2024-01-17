@@ -55,6 +55,17 @@ func (c *Correlate) failed(m *snmp.Message, err error) {
 	c.out <- m
 }
 
+func (c *Correlate) Close() {
+	if c == nil {
+		return
+	}
+	c.queue.Close()
+}
+
+func (c *Correlate) SendChannel() chan<- *snmp.Message {
+	return c.queue.SendChannel()
+}
+
 func (c *Correlate) CorrelateWorker() {
 	defer c.wg.Done()
 outer:
@@ -172,7 +183,7 @@ func NewCorrelate(c Config, wg *sync.WaitGroup, fwdChan chan<- *snmp.Message) (*
 			QueueLen:    metrics.CorrelateQueueFilled,
 		},
 	)
-	return &Correlate{
+	cor := &Correlate{
 		backend: be,
 		wg:      wg,
 		queue:   q,
@@ -186,5 +197,6 @@ func NewCorrelate(c Config, wg *sync.WaitGroup, fwdChan chan<- *snmp.Message) (*
 			failed:    metrics.CorrelateFailed,
 			retried:   metrics.CorrelateRetried,
 		},
-	}, nil
+	}
+	return cor, nil
 }

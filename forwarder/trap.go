@@ -166,6 +166,9 @@ func (s *SNMPTrap) Run() {
 		s.logger.Fatal().Err(err).Msg("failed starting trap forwarder")
 		return
 	}
+	if s.config.Trap.Workers <= 0 {
+		s.config.Trap.Workers = 1
+	}
 	for i := 0; i < s.config.Trap.Workers; i++ {
 		s.workerWg.Add(1)
 		go s.runWorker()
