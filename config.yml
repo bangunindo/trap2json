@@ -41,6 +41,9 @@ correlate:
   # if the clear event arrived, it will be automatically deleted
   # default: 30d
   ttl: 30d
+  # specify interval for cleanup if ttl is reached, only applicable to
+  # postgres and mysql backend
+  cleanup_interval: 1h
   # define how long should a forwarder wait for its queue to flush during a shutdown event
   # default: 5s
   shutdown_wait_time: 0s

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/bangunindo/trap2json/logger"
@@ -11,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,7 +20,7 @@ import (
 func TestRun(t *testing.T) {
 	var i int
 	for {
-		jsonFGlob := fmt.Sprintf("test_files/%04d_*.json", i)
+		jsonFGlob := fmt.Sprintf("test_files/%04d_*.ndjson", i)
 		confFGlob := fmt.Sprintf("test_files/%04d_*.yml", i)
 		logFGlob := fmt.Sprintf("test_files/%04d_*.log", i)
 
@@ -67,9 +69,18 @@ func TestRun(t *testing.T) {
 		}
 		jsonBytes, err := io.ReadAll(jsonFOpen)
 		assert.NoError(t, err)
-		var jsonExpected map[string]any
-		err = json.Unmarshal(jsonBytes, &jsonExpected)
-		assert.NoError(t, err)
+		var jsonExpected []map[string]any
+		for _, js := range bytes.Split(jsonBytes, []byte("\n")) {
+			js = bytes.TrimSpace(js)
+			if string(js) == "" {
+				continue
+			}
+			var jsonEntry map[string]any
+			err = json.Unmarshal(js, &jsonEntry)
+			if assert.NoError(t, err) {
+				jsonExpected = append(jsonExpected, jsonEntry)
+			}
+		}
 
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
@@ -80,28 +91,51 @@ func TestRun(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			cleanShutdown = true
+			close(outChan)
 		case <-time.After(60 * time.Second):
 			assert.NoError(t, errors.New("timeout"))
 			cancel()
 		}
 
 		if cleanShutdown {
-			msg := <-outChan
-			var jsonActual map[string]any
-			err = json.Unmarshal(msg.Metadata.MessageJSON, &jsonActual)
-			assert.NoError(t, err)
-			timeActual, ok := jsonActual["time"]
-			assert.True(t, ok)
-			if assert.IsType(t, "", timeActual) {
-				_, err = time.Parse(time.RFC3339, timeActual.(string))
+			var j int
+			for msg := range outChan {
+				var jsonActual map[string]any
+				err = json.Unmarshal(msg.Metadata.MessageJSON, &jsonActual)
 				assert.NoError(t, err)
+				timeActual, ok := jsonActual["time"]
+				assert.True(t, ok)
+				if assert.IsType(t, "", timeActual) {
+					_, err = time.Parse(time.RFC3339, timeActual.(string))
+					assert.NoError(t, err)
+				}
+				if strings.Contains(jsonF, "correlate") {
+					if j == 0 {
+						corr, ok := jsonActual["correlate"]
+						assert.True(t, ok)
+						assert.Nil(t, corr)
+					} else {
+						corr, ok := jsonActual["correlate"]
+						assert.True(t, ok)
+						assert.NotNil(t, corr)
+					}
+				}
+				if len(jsonExpected) > j {
+					js := jsonExpected[j]
+					delete(js, "time")
+					delete(jsonActual, "time")
+					delete(js, "correlate")
+					delete(jsonActual, "correlate")
+					assert.Equal(t, js, jsonActual)
+				} else {
+					assert.Failf(t, "not enough json expected", "len=%d", len(jsonExpected))
+				}
+				j++
 			}
-			delete(jsonExpected, "time")
-			delete(jsonActual, "time")
-			assert.Equal(t, jsonExpected, jsonActual)
+			if j == 0 {
+				assert.Fail(t, "no message")
+			}
 		}
-		close(outChan)
-
 		i++
 	}
 }

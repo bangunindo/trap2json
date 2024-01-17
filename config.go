@@ -35,6 +35,7 @@ func parseConfig(path string) (config, error) {
 	v.SetDefault("snmptrapd.magic_end", "--TFWDEND--")
 	v.SetDefault("snmptrapd.buffer_size", "64k")
 	v.SetDefault("correlate.backend_url", "badger://")
+	v.SetDefault("correlate.cleanup_interval", helper.Duration{Duration: time.Hour})
 	v.SetDefault("correlate.ttl", helper.Duration{Duration: 30 * 24 * time.Hour})
 	v.SetDefault("correlate.queue_size", 10000)
 	v.SetDefault("correlate.workers", 4)

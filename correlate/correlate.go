@@ -1,6 +1,7 @@
 package correlate
 
 import (
+	"context"
 	"github.com/bangunindo/trap2json/correlate/backend"
 	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/metrics"
@@ -13,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"sync"
+	"time"
 )
 
 type counter struct {
@@ -31,6 +33,8 @@ type Correlate struct {
 	retry   helper.AutoRetry
 	logger  zerolog.Logger
 	ctr     counter
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func (c *Correlate) Retry(m *snmp.Message, err error) {
@@ -60,6 +64,7 @@ func (c *Correlate) Close() {
 		return
 	}
 	c.queue.Close()
+	c.cancel()
 }
 
 func (c *Correlate) SendChannel() chan<- *snmp.Message {
@@ -198,5 +203,19 @@ func NewCorrelate(c Config, wg *sync.WaitGroup, fwdChan chan<- *snmp.Message) (*
 			retried:   metrics.CorrelateRetried,
 		},
 	}
+	cor.ctx, cor.cancel = context.WithCancel(context.Background())
+	go func() {
+		for {
+			select {
+			case <-time.After(c.CleanupInterval.Duration):
+				err := cor.backend.Cleanup()
+				if err != nil {
+					logger.Warn().Err(err).Msg("cleanup failed")
+				}
+			case <-cor.ctx.Done():
+				return
+			}
+		}
+	}()
 	return cor, nil
 }

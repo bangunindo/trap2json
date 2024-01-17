@@ -65,9 +65,12 @@ func (b *badgerdb) Close() error {
 func newBadger(urlParsed *url.URL, ttl time.Duration) (Backend, error) {
 	var opt badger.Options
 	if urlParsed.Path == "" {
-		opt = badger.DefaultOptions("").WithInMemory(true)
+		opt = badger.DefaultOptions("").
+			WithInMemory(true).
+			WithLogger(nil)
 	} else {
-		opt = badger.DefaultOptions(urlParsed.Path)
+		opt = badger.DefaultOptions(urlParsed.Path).
+			WithLogger(nil)
 	}
 	db, err := badger.Open(opt)
 	if err != nil {
