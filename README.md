@@ -28,6 +28,7 @@ can use this as a solution for your distributed zabbix setup.
   - Supports unbounded queue
 - Forwarder auto retry with exponential backoff delay
 - Supports trap/inform with version 1/2c/3 in a single endpoint
+- Correlates open/close alarms
 
 ## Installation
 The supported way of running Trap2JSON is to use docker. Docker image is available
