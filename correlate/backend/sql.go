@@ -189,7 +189,13 @@ func newSql(urlParsed *url.URL, ttl, timeout time.Duration) (Backend, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed initializing db")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	defer cancel()
 	err = db.PingContext(ctx)
 	if err != nil {
