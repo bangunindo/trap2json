@@ -110,29 +110,17 @@ func (q *Queue[T]) ReceiveChannel() <-chan T {
 }
 
 func (q *Queue[T]) receiveWorker() {
-	var msg *item
-outer:
 	for {
-		if q.q.Disposed() {
-			break
-		}
-		for {
-			m := q.q.Peek()
-			if m == nil {
-				time.Sleep(10 * time.Millisecond)
-				continue outer
-			} else {
-				msg = m.(*item)
-				if msg.i.Eta().Before(time.Now()) {
-					break
-				} else {
-					time.Sleep(10 * time.Millisecond)
-					continue outer
-				}
-			}
-		}
 		if m, err := q.q.Get(1); err == nil {
-			msg = m[0].(*item)
+			msg := m[0].(*item)
+			if msg.i.Eta().After(time.Now()) {
+				time.Sleep(10 * time.Millisecond)
+				err = q.q.Put(m[0])
+				if err != nil {
+					break
+				}
+				continue
+			}
 			q.recvChan <- msg.i.(T)
 		} else {
 			break
