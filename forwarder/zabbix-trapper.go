@@ -2,9 +2,9 @@ package forwarder
 
 import (
 	"fmt"
+	"github.com/bangunindo/trap2json/helper"
 	zsend "github.com/essentialkaos/go-zabbix"
 	"github.com/pkg/errors"
-	"net/url"
 	"strings"
 )
 
@@ -23,9 +23,9 @@ type ZSAdvancedConfig struct {
 	// for example:
 	// - postgres://user:pass@127.0.0.1:5432/dbname?param1=value1&param2=value2
 	// - mysql://user:pass@127.0.0.1:3306/dbname?param1=value1&param2=value2
-	DBUrl             string   `mapstructure:"db_url"`
-	DBRefreshInterval Duration `mapstructure:"db_refresh_interval"`
-	DBQueryTimeout    Duration `mapstructure:"db_query_timeout"`
+	DBUrl             string          `mapstructure:"db_url"`
+	DBRefreshInterval helper.Duration `mapstructure:"db_refresh_interval"`
+	DBQueryTimeout    helper.Duration `mapstructure:"db_query_timeout"`
 }
 
 func (z *ZSAdvancedConfig) initProxyMap() {
@@ -38,32 +38,6 @@ func (z *ZSAdvancedConfig) initProxyMap() {
 func (z *ZSAdvancedConfig) getProxy(host string) (ProxyConf, bool) {
 	h, ok := z.proxyMap[host]
 	return h, ok
-}
-
-func (z *ZSAdvancedConfig) GetDSN() (string, string, error) {
-	u, err := url.Parse(z.DBUrl)
-	if err != nil {
-		return "", "", err
-	}
-	switch u.Scheme {
-	case "postgres":
-		q := u.Query()
-		q.Set("default_query_exec_mode", "simple_protocol")
-		u.RawQuery = q.Encode()
-		return "pgx", u.String(), nil
-	case "mysql":
-		q := u.Query()
-		if v := q.Get("host"); v != "" {
-			q.Del("host")
-			u.RawQuery = q.Encode()
-			u.Host = fmt.Sprintf("unix(%s)", v)
-		} else {
-			u.Host = fmt.Sprintf("tcp(%s)", u.Host)
-		}
-		dsn := strings.Replace(u.String(), "mysql://", "", 1)
-		return "mysql", dsn, nil
-	}
-	return "", "", errors.Errorf("unsupported db backend: %s", u.Scheme)
 }
 
 type LookupStrategy int8
@@ -136,13 +110,9 @@ func (z *ZabbixTrapper) Run() {
 	defer z.cancel()
 	defer z.logger.Info().Msg("forwarder exited")
 	z.logger.Info().Msg("starting forwarder")
-	for {
-		m, err := z.Get()
-		if err != nil {
-			break
-		}
+	for m := range z.ReceiveChannel() {
 		m.Compile(z.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			z.ctrFiltered.Inc()
 			continue
 		}
@@ -173,9 +143,9 @@ func (z *ZabbixTrapper) Run() {
 			z.ctrDropped.Inc()
 			continue
 		}
-		item := c.Add(z.config.ZabbixTrapper.ItemKey, string(m.MessageJSON))
-		item.Clock = m.Time.Unix()
-		item.NS = m.Time.Nanosecond()
+		item := c.Add(z.config.ZabbixTrapper.ItemKey, string(m.Metadata.MessageJSON))
+		item.Clock = m.Payload.Time.Unix()
+		item.NS = m.Payload.Time.Nanosecond()
 		z.logger.Trace().Str("address", address).Str("hostname", hostname).Msg("sending to zabbix")
 		if _, err = c.Send(); err != nil {
 			z.Retry(m, err)

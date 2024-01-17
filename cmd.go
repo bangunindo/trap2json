@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/bangunindo/trap2json/correlate"
 	"github.com/bangunindo/trap2json/forwarder"
 	"github.com/bangunindo/trap2json/metrics"
 	"github.com/bangunindo/trap2json/snmp"
@@ -147,15 +148,36 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	}
 
 	parseChan := make(chan []byte)
-	forwarderChan := make(chan snmp.Message)
+	forwarderChan := make(chan *snmp.Message)
+	var parseSendChan chan<- *snmp.Message
 	parseWg := new(sync.WaitGroup)
+	correlateWg := new(sync.WaitGroup)
 	forwarderWg := new(sync.WaitGroup)
-	// spawn parser workers
+	var corr *correlate.Correlate
+	var err error
+	if c.ParseWorkers <= 0 {
+		c.ParseWorkers = 1
+	}
+	if c.Correlate.Enable {
+		if c.Correlate.Workers <= 0 {
+			c.Correlate.Workers = 1
+		}
+		corr, err = correlate.NewCorrelate(c.Correlate, correlateWg, forwarderChan)
+		if err != nil {
+			log.Fatal().Err(err).Msg("correlate failed to start")
+		}
+		parseSendChan = corr.SendChannel()
+		for i := 0; i < c.Correlate.Workers; i++ {
+			correlateWg.Add(1)
+			go corr.CorrelateWorker()
+		}
+	} else {
+		parseSendChan = forwarderChan
+	}
 	for i := 0; i < c.ParseWorkers; i++ {
 		parseWg.Add(1)
-		go snmp.ParserWorker(i+1, parseWg, parseChan, forwarderChan)
+		go snmp.ParserWorker(i+1, parseWg, parseChan, parseSendChan)
 	}
-	// spawn forwarders
 	forwarderWg.Add(1)
 	go forwarder.StartForwarders(forwarderWg, c.Forwarders, forwarderChan)
 
@@ -176,6 +198,7 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	for scanner.Scan() {
 		metrics.SnmpTrapDProcessed.Inc()
 		line := scanner.Bytes()
+		metrics.SnmpTrapDProcessedBytes.Add(float64(len(line)))
 		log.Trace().Bytes("data", line).Msg("received data")
 		idx := bytes.LastIndex(line, magicBegin)
 		if idx < 0 {
@@ -197,6 +220,8 @@ func Run(ctx context.Context, c config, r io.Reader, noSnmpTrapD bool) {
 	// drain all channels
 	close(parseChan)
 	parseWg.Wait()
+	corr.Close()
+	correlateWg.Wait()
 	close(forwarderChan)
 	forwarderWg.Wait()
 	cancel()

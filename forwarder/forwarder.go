@@ -2,13 +2,12 @@ package forwarder
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/Workiva/go-datastructures/queue"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/metrics"
+	"github.com/bangunindo/trap2json/queue"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -17,30 +16,6 @@ import (
 	"sync"
 	"time"
 )
-
-type Duration struct {
-	time.Duration
-}
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.String())
-}
-
-func (d *Duration) UnmarshalText(b []byte) error {
-	if d == nil {
-		return errors.New("can't unmarshal a nil *Duration")
-	}
-	var err error
-	d.Duration, err = time.ParseDuration(string(b))
-	return err
-}
-
-type AutoRetry struct {
-	Enable     bool
-	MaxRetries int      `mapstructure:"max_retries"`
-	MinDelay   Duration `mapstructure:"min_delay"`
-	MaxDelay   Duration `mapstructure:"max_delay"`
-}
 
 type Config struct {
 	// ID identifies forwarder name, also used for prometheus labelling
@@ -51,12 +26,12 @@ type Config struct {
 	// TimeFormat specifies golang time format for casting time related fields to string
 	TimeFormat string `mapstructure:"time_format"`
 	// TimeAsTimezone will cast any time field to specified timezone
-	TimeAsTimezone   string   `mapstructure:"time_as_timezone"`
-	ShutdownWaitTime Duration `mapstructure:"shutdown_wait_time"`
+	TimeAsTimezone   string          `mapstructure:"time_as_timezone"`
+	ShutdownWaitTime helper.Duration `mapstructure:"shutdown_wait_time"`
 	// Filter, JSONFormat utilizes antonmedv/expr expressions
 	Filter        string
-	JSONFormat    string    `mapstructure:"json_format"`
-	AutoRetry     AutoRetry `mapstructure:"auto_retry"`
+	JSONFormat    string           `mapstructure:"json_format"`
+	AutoRetry     helper.AutoRetry `mapstructure:"auto_retry"`
 	Mock          *MockConfig
 	File          *FileConfig
 	Kafka         *KafkaConfig
@@ -96,18 +71,23 @@ type Tls struct {
 type Forwarder interface {
 	// Send will send the trap message to its corresponding forwarder.
 	// Does nothing if the queue buffer is full or forwarder is already closed
-	Send(message *snmp.Message)
+	Send(*snmp.Message)
+	// ReceiveChannel is used inside the forwarder to receive data
+	// from SendChannel
+	ReceiveChannel() <-chan *snmp.Message
 	// Close informs the forwarder to stop processing any new messages
 	Close()
 	// Done informs the caller if forwarder is done processing
 	Done() <-chan struct{}
+	// Config returns the forwarder config
+	Config() Config
 }
 
 type Base struct {
 	idx             string
 	fwdType         string
 	config          Config
-	queue           *queue.PriorityQueue
+	queue           *queue.Queue[*snmp.Message]
 	ctx             context.Context
 	cancel          context.CancelFunc
 	ctrProcessed    prometheus.Counter
@@ -122,58 +102,26 @@ type Base struct {
 	CompilerConf    snmp.MessageCompiler
 }
 
-// Get returns error only if the queue is closed
-func (b *Base) Get() (*snmp.Message, error) {
-	var msg *snmp.Message
-	for {
-		if b.queue.Disposed() {
-			return nil, queue.ErrDisposed
-		}
-		m := b.queue.Peek()
-		if m == nil {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		} else {
-			msg = m.(*snmp.Message)
-			if msg.Eta.Before(time.Now()) {
-				break
-			} else {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
-		}
-	}
-	if m, err := b.queue.Get(1); err == nil {
-		msg = m[0].(*snmp.Message)
-		return msg, nil
-	} else {
-		return nil, err
-	}
+func (b *Base) Config() Config {
+	return b.config
 }
 
-// Send snmp message to forwarder
-func (b *Base) Send(message *snmp.Message) {
-	b.ctrProcessed.Inc()
-	if b.config.QueueSize == 0 || b.queue.Len() < b.config.QueueSize {
-		err := b.queue.Put(message)
-		if err != nil {
-			b.logger.Error().Msg("unexpected error, queue is closed")
-			b.ctrDropped.Inc()
-		}
-	} else {
-		b.logger.Warn().Msg("queue is full, consider increasing queue_size for this forwarder")
-		b.ctrDropped.Inc()
-	}
+func (b *Base) Send(m *snmp.Message) {
+	b.queue.SendChannel() <- m
+}
+
+func (b *Base) ReceiveChannel() <-chan *snmp.Message {
+	return b.queue.ReceiveChannel()
 }
 
 func (b *Base) Retry(message *snmp.Message, err error) {
-	if b.config.AutoRetry.Enable && message.Retries < b.config.AutoRetry.MaxRetries {
+	if b.config.AutoRetry.Enable && message.Metadata.Retries < b.config.AutoRetry.MaxRetries {
 		eta := message.ComputeEta(
 			b.config.AutoRetry.MinDelay.Duration,
 			b.config.AutoRetry.MaxDelay.Duration,
 		)
-		message.Retries++
-		message.Eta = eta
+		message.Metadata.Retries++
+		message.Metadata.Eta = eta
 		b.ctrRetried.Inc()
 		b.logger.Debug().Err(err).Msg("retrying to forward trap")
 		b.Send(message)
@@ -184,24 +132,7 @@ func (b *Base) Retry(message *snmp.Message, err error) {
 }
 
 func (b *Base) Close() {
-	go func() {
-		if b.config.ShutdownWaitTime.Duration > 0 {
-			timeout := time.After(b.config.ShutdownWaitTime.Duration)
-		outer:
-			for {
-				select {
-				case <-timeout:
-					break outer
-				default:
-					if b.queue.Empty() {
-						break outer
-					}
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
-		b.queue.Dispose()
-	}()
+	b.queue.Close()
 }
 
 func (b *Base) Done() <-chan struct{} {
@@ -216,7 +147,6 @@ func NewBase(c Config, idx int) Base {
 		idx:     idxStr,
 		fwdType: fwdType,
 		config:  c,
-		queue:   queue.NewPriorityQueue(c.QueueSize, true),
 		ctx:     ctx,
 		cancel:  cancel,
 		ctrProcessed: metrics.ForwarderProcessed.With(prometheus.Labels{
@@ -267,10 +197,22 @@ func NewBase(c Config, idx int) Base {
 			Str("id", c.ID).
 			Logger(),
 	}
+	base.queue = queue.NewQueue[*snmp.Message](
+		base.logger,
+		c.QueueSize,
+		c.ShutdownWaitTime.Duration,
+		nil,
+		queue.Counter{
+			Processed: base.ctrProcessed,
+			Drop:      base.ctrDropped,
+			QueueCap:  base.ctrQueueCap,
+			QueueLen:  base.ctrQueueLen,
+		},
+	)
 	var filterExpr, formatExpr *vm.Program
 	var err error
 	if c.Filter != "" {
-		opts := []expr.Option{expr.AsBool(), expr.Env(snmp.MessageCompiled{})}
+		opts := []expr.Option{expr.AsBool(), expr.Env(snmp.Payload{})}
 		opts = append(opts, snmp.Functions...)
 		filterExpr, err = expr.Compile(
 			c.Filter,
@@ -281,7 +223,7 @@ func NewBase(c Config, idx int) Base {
 		}
 	}
 	if c.JSONFormat != "" {
-		opts := []expr.Option{expr.AsKind(reflect.Map), expr.Env(snmp.MessageCompiled{})}
+		opts := []expr.Option{expr.AsKind(reflect.Map), expr.Env(snmp.Payload{})}
 		opts = append(opts, snmp.Functions...)
 		formatExpr, err = expr.Compile(
 			c.JSONFormat,
@@ -292,28 +234,14 @@ func NewBase(c Config, idx int) Base {
 		}
 	}
 	base.CompilerConf = snmp.MessageCompiler{
-		TimeFormat:     c.TimeFormat,
-		TimeAsTimezone: c.TimeAsTimezone,
-		Filter:         filterExpr,
-		JSONFormat:     formatExpr,
-		Logger:         base.logger,
+		Filter:     filterExpr,
+		JSONFormat: formatExpr,
+		Logger:     base.logger,
 	}
-	// prometheus exporter for queue length
-	go func() {
-		base.ctrQueueCap.Set(float64(c.QueueSize))
-		for {
-			select {
-			case <-time.After(time.Second):
-				base.ctrQueueLen.Set(float64(base.queue.Len()))
-			case <-base.ctx.Done():
-				return
-			}
-		}
-	}()
 	return base
 }
 
-func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Message) {
+func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan *snmp.Message) {
 	defer wg.Done()
 	var forwarders []Forwarder
 	if len(c) == 0 {
@@ -395,7 +323,11 @@ func StartForwarders(wg *sync.WaitGroup, c []Config, messageChan <-chan snmp.Mes
 	for msg := range messageChan {
 		for _, fwd := range forwarders {
 			mCopy := msg.Copy()
-			mCopy.Eta = time.Now()
+			mCopy.Metadata = snmp.Metadata{
+				Eta:            time.Now(),
+				TimeAsTimezone: fwd.Config().TimeAsTimezone,
+				TimeFormat:     fwd.Config().TimeFormat,
+			}
 			fwd.Send(&mCopy)
 		}
 	}

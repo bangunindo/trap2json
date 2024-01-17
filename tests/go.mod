@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/cavaliercoder/go-zabbix v0.0.0-20230131181515-93725c39d639
 	github.com/eclipse/paho.mqtt.golang v1.4.3
+	github.com/go-json-experiment/json v0.0.0-20231102232822-2e55bd4e08b0
 	github.com/gosnmp/gosnmp v1.37.0
 	github.com/segmentio/kafka-go v0.4.46
 	github.com/stretchr/testify v1.8.4

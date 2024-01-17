@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/carlmjohnson/requests"
 	"github.com/pkg/errors"
 	"net/http"
@@ -59,7 +60,7 @@ type HTTPConfig struct {
 	BasicAuth *HTTPBasicAuth `mapstructure:"basic_auth"`
 	Tls       *Tls
 	Proxy     string
-	Timeout   Duration
+	Timeout   helper.Duration
 }
 
 type HTTP struct {
@@ -113,18 +114,14 @@ func (h *HTTP) Run() {
 	}
 	builder = builder.Transport(transport)
 
-	for {
-		m, err := h.Get()
-		if err != nil {
-			break
-		}
+	for m := range h.ReceiveChannel() {
 		m.Compile(h.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			h.ctrFiltered.Inc()
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), h.config.HTTP.Timeout.Duration)
-		if err := builder.BodyBytes(m.MessageJSON).Fetch(ctx); err != nil {
+		if err := builder.BodyBytes(m.Metadata.MessageJSON).Fetch(ctx); err != nil {
 			cancel()
 			h.Retry(m, err)
 		} else {

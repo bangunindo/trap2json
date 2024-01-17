@@ -93,27 +93,27 @@ func (s *SNMPTrap) baseBuilder() (cmd []string) {
 
 func (s *SNMPTrap) commandBuilder(baseCmd []string, m *snmp.Message) (cmd []string) {
 	cmd = baseCmd[:]
-	values := m.Values[:]
+	values := m.Payload.Values[:]
 	var uptime int
-	if m.UptimeSeconds.Valid {
-		uptime = int(m.UptimeSeconds.Float64 * 100)
+	if m.Payload.UptimeSeconds != nil {
+		uptime = int(*m.Payload.UptimeSeconds * 100)
 	}
 	trapOid := ".1.3.6.1.6.3.1.1.4.1"
-	if m.EnterpriseOID.Valid {
-		trapOid = m.EnterpriseOID.String
+	if m.Payload.EnterpriseOID != nil {
+		trapOid = *m.Payload.EnterpriseOID
 	}
 	switch s.config.Trap.Version {
 	case "v1":
 		var trapType, trapSubType int
-		if m.TrapType.Valid {
-			trapType = int(m.TrapType.Int64)
+		if m.Payload.TrapType != nil {
+			trapType = int(*m.Payload.TrapType)
 		}
-		if m.TrapSubType.Valid {
-			trapSubType = int(m.TrapSubType.Int64)
+		if m.Payload.TrapSubType != nil {
+			trapSubType = int(*m.Payload.TrapSubType)
 		}
 		agentAddr := "0.0.0.0"
-		if m.AgentAddress.Valid {
-			agentAddr = m.AgentAddress.String
+		if m.Payload.AgentAddress != nil {
+			agentAddr = *m.Payload.AgentAddress
 		}
 		cmd = append(
 			cmd,
@@ -166,18 +166,17 @@ func (s *SNMPTrap) Run() {
 		s.logger.Fatal().Err(err).Msg("failed starting trap forwarder")
 		return
 	}
+	if s.config.Trap.Workers <= 0 {
+		s.config.Trap.Workers = 1
+	}
 	for i := 0; i < s.config.Trap.Workers; i++ {
 		s.workerWg.Add(1)
 		go s.runWorker()
 	}
 	baseCmd := s.baseBuilder()
-	for {
-		m, err := s.Get()
-		if err != nil {
-			break
-		}
+	for m := range s.ReceiveChannel() {
 		m.Compile(s.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			s.ctrFiltered.Inc()
 			continue
 		}

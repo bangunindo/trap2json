@@ -3,10 +3,11 @@ package forwarder
 import (
 	"context"
 	"database/sql"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
+	"github.com/georgysavva/scany/v2/sqlscan"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"sync"
@@ -83,23 +84,28 @@ func (z *ZabbixLookup) refresh() {
 		dur := time.Since(now)
 		z.logger.Info().Str("duration", dur.String()).Msg("background cache refresh done")
 	}()
-	if driver, dsn, err := z.conf.Advanced.GetDSN(); err != nil {
+	if driver, dsn, err := helper.ParseDSN(z.conf.Advanced.DBUrl); err != nil {
 		z.logger.Warn().Err(err).Msg("failed reading db_url")
 	} else {
-		db, err := sqlx.Connect(driver, dsn)
+		db, err := sql.Open(driver, dsn)
 		if err != nil {
-			z.logger.Warn().Err(err).Msg("failed connecting to database")
+			z.logger.Warn().Err(err).Msg("failed initializing db")
 			return
 		}
 		defer db.Close()
 		ctx, cancel := context.WithTimeout(z.ctx, z.conf.Advanced.DBQueryTimeout.Duration)
 		defer cancel()
+		err = db.PingContext(ctx)
+		if err != nil {
+			z.logger.Warn().Err(err).Msg("failed connecting to db")
+			return
+		}
 		var isPost60 int
 		switch driver {
 		case "pgx":
-			err = db.GetContext(ctx, &isPost60, isPost60PostgresQuery)
+			err = sqlscan.Get(ctx, db, &isPost60, isPost60PostgresQuery)
 		case "mysql":
-			err = db.GetContext(ctx, &isPost60, isPost60MysqlQuery)
+			err = sqlscan.Get(ctx, db, &isPost60, isPost60MysqlQuery)
 		default:
 			z.logger.Fatal().Msgf("unknown driver: %s", driver)
 			return
@@ -111,9 +117,9 @@ func (z *ZabbixLookup) refresh() {
 		var results []QueryResult
 		switch isPost60 {
 		case 0:
-			err = db.SelectContext(ctx, &results, hostCacheQueryPre60, z.conf.ItemKey)
+			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPre60, z.conf.ItemKey)
 		case 1:
-			err = db.SelectContext(ctx, &results, hostCacheQueryPost60, z.conf.ItemKey)
+			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPost60, z.conf.ItemKey)
 		default:
 			z.logger.Error().Msg("unexpected error, incorrect isPost60 result")
 			return
@@ -165,7 +171,7 @@ func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupR
 	if z.conf.Advanced != nil {
 		switch strategy {
 		case LookupFromOID:
-			for _, v := range m.Values {
+			for _, v := range m.Payload.Values {
 				if v.HasOIDPrefix(z.conf.OIDLookup) {
 					if vStr, ok := v.Value.(string); ok {
 						return z.lookupByHostname(vStr)
@@ -173,18 +179,18 @@ func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupR
 				}
 			}
 		case LookupFromAgentAddress:
-			if m.AgentAddress.Valid {
-				return z.lookupByAddress(m.AgentAddress.String)
+			if m.Payload.AgentAddress != nil {
+				return z.lookupByAddress(*m.Payload.AgentAddress)
 			}
 		case LookupFromSourceAddress:
-			if m.SrcAddress != "" {
-				return z.lookupByAddress(m.SrcAddress)
+			if m.Payload.SrcAddress != "" {
+				return z.lookupByAddress(m.Payload.SrcAddress)
 			}
 		}
 	} else {
 		switch strategy {
 		case LookupFromOID:
-			for _, v := range m.Values {
+			for _, v := range m.Payload.Values {
 				if v.HasOIDPrefix(z.conf.OIDLookup) {
 					if vStr, ok := v.Value.(string); ok {
 						return LookupResult{
@@ -194,15 +200,15 @@ func (z *ZabbixLookup) Lookup(m *snmp.Message, strategy LookupStrategy) (LookupR
 				}
 			}
 		case LookupFromAgentAddress:
-			if m.AgentAddress.Valid {
+			if m.Payload.AgentAddress != nil {
 				return LookupResult{
-					Hostname: m.AgentAddress.String,
+					Hostname: *m.Payload.AgentAddress,
 				}, nil
 			}
 		case LookupFromSourceAddress:
-			if m.SrcAddress != "" {
+			if m.Payload.SrcAddress != "" {
 				return LookupResult{
-					Hostname: m.SrcAddress,
+					Hostname: m.Payload.SrcAddress,
 				}, nil
 			}
 		}

@@ -1,0 +1,13 @@
+correlate:
+  enable: true
+  workers: 1
+  conditions:
+    - match: src_address in ["192.168.215.1"]
+      identifiers:
+        - src_address
+      clear: OidValueString(value_list, ".1.3.6.1.6.3.13.1.1.1.1", true) == "normal"
+parse_workers: 1
+forwarders:
+  - id: Test Correlate
+    mock:
+      timeout: 0s

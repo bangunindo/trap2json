@@ -1,6 +1,7 @@
 package forwarder
 
 import (
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/pkg/errors"
 	"time"
@@ -8,7 +9,7 @@ import (
 
 type MockConfig struct {
 	OutChannel chan *snmp.Message
-	Timeout    Duration
+	Timeout    helper.Duration
 }
 
 type Mock struct {
@@ -20,13 +21,9 @@ func (m *Mock) Run() {
 	defer m.logger.Info().Msg("forwarder exited")
 	m.logger.Info().Msg("starting forwarder")
 
-	for {
-		msg, err := m.Get()
-		if err != nil {
-			break
-		}
+	for msg := range m.ReceiveChannel() {
 		msg.Compile(m.CompilerConf)
-		if msg.Skip {
+		if msg.Metadata.Skip {
 			m.ctrFiltered.Inc()
 			continue
 		}

@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
+	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
+	"github.com/go-json-experiment/json"
 	"github.com/pkg/errors"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
@@ -66,8 +67,8 @@ type KafkaConfig struct {
 	Topic        string
 	Tls          *Tls
 	Sasl         *KafkaSasl
-	BatchSize    int      `mapstructure:"batch_size"`
-	BatchTimeout Duration `mapstructure:"batch_timeout"`
+	BatchSize    int             `mapstructure:"batch_size"`
+	BatchTimeout helper.Duration `mapstructure:"batch_timeout"`
 }
 
 const kafkaMaxGoroutine = 10000
@@ -146,24 +147,21 @@ func (k *Kafka) Run() {
 	}
 	defer producer.Close()
 
-	for {
-		m, err := k.Get()
-		if err != nil {
-			break
-		}
+	for m := range k.ReceiveChannel() {
+		m := m
 		m.Compile(k.CompilerConf)
-		if m.Skip {
+		if m.Metadata.Skip {
 			k.ctrFiltered.Inc()
 			continue
 		}
 		var key []byte
 		if k.keyFieldTemplate != nil {
-			if res, err := expr.Run(k.keyFieldTemplate, m.MessageCompiled); err == nil {
+			if res, err := expr.Run(k.keyFieldTemplate, m.Payload); err == nil {
 				switch v := res.(type) {
 				case string:
 					key = []byte(v)
 				default:
-					key, err = json.Marshal(v)
+					key, err = json.Marshal(v, json.Deterministic(true))
 					if string(key) == "null" {
 						key = nil
 					}
@@ -184,7 +182,7 @@ func (k *Kafka) Run() {
 				context.Background(),
 				kafka.Message{
 					Key:   key,
-					Value: m.MessageJSON,
+					Value: m.Metadata.MessageJSON,
 				},
 			); err != nil {
 				k.Retry(m, err)
@@ -205,7 +203,7 @@ func NewKafka(c Config, idx int) Forwarder {
 	if fwd.config.Kafka.KeyField != "" {
 		fwd.keyFieldTemplate, err = expr.Compile(
 			fwd.config.Kafka.KeyField,
-			expr.Env(snmp.MessageCompiled{}),
+			expr.Env(snmp.Payload{}),
 		)
 		if err != nil {
 			fwd.logger.Fatal().Err(err).Msg("failed compiling kafka.key_field expression")
