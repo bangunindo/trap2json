@@ -92,7 +92,7 @@ var containers = []*ContainerInfo{
 			Mounts: tc.ContainerMounts{
 				tc.ContainerMount{
 					Source: tc.GenericBindMountSource{
-						HostPath: path.Join(wd, "tests/forwarder_mqtt_test.conf"),
+						HostPath: path.Join(wd, "/forwarder_mqtt_test.conf"),
 					},
 					Target: "/mosquitto/config/mosquitto.conf",
 				},
