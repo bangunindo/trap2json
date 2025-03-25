@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
-	"github.com/cavaliercoder/go-zabbix"
-	"github.com/stretchr/testify/assert"
-	tc "github.com/testcontainers/testcontainers-go"
 	"io"
+	"net/http"
 	"os/exec"
 	"path"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/carlmjohnson/requests"
+	"github.com/cavaliercoder/go-zabbix"
+	"github.com/stretchr/testify/assert"
+	tc "github.com/testcontainers/testcontainers-go"
 )
 
 func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
@@ -41,9 +45,19 @@ func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
 }
 
 func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
+	var resp *zabbix.Response
+	url := session.URL
+	reqBuilder := requests.
+		URL(url).
+		Transport(&http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}).
+		ContentType("application/json-rpc").
+		Accept("application/json")
+
 	respTemplate := make(map[string][]string)
 	// create template
-	resp, err := session.Do(zabbix.NewRequest(
+	req := zabbix.NewRequest(
 		"template.create",
 		map[string]any{
 			"host": "Zabbix trapper template",
@@ -51,7 +65,10 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				"groupid": 1,
 			},
 		},
-	))
+	)
+
+	err := reqBuilder.Bearer(session.Token).BodyJSON(req).ToJSON(&resp).Fetch(context.Background())
+	// resp, err := session.Do(req)
 	assert.NoError(t, err)
 	err = resp.Bind(&respTemplate)
 	assert.NoError(t, err)

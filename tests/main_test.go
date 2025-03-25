@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	"github.com/go-json-experiment/json"
-	"github.com/stretchr/testify/assert"
-	tc "github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"log"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/go-json-experiment/json"
+	"github.com/stretchr/testify/assert"
+	tc "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const networkName = "t2j-testing"
@@ -114,7 +115,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-server-pgsql:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-server-pgsql:ubuntu-7.2.2",
 			Name:         "t2j-zabbix-server",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
@@ -129,7 +130,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-web-nginx-pgsql:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-web-nginx-pgsql:ubuntu-7.2.2",
 			Name:         "t2j-zabbix-web",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"8080/tcp"},
@@ -145,7 +146,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-7.2.2",
 			Name:         "t2j-zabbix-proxy-01",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
@@ -158,7 +159,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-7.2.2",
 			Name:         "t2j-zabbix-proxy-02",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
