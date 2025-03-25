@@ -3,6 +3,9 @@ package forwarder
 import (
 	"context"
 	"database/sql"
+	"sync"
+	"time"
+
 	"github.com/bangunindo/trap2json/helper"
 	"github.com/bangunindo/trap2json/snmp"
 	"github.com/georgysavva/scany/v2/sqlscan"
@@ -10,8 +13,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"sync"
-	"time"
 )
 
 type QueryResult struct {
@@ -58,14 +59,31 @@ where i2.key_ = $1
   -- ip of snmp interface
   and i.type = 2`
 
-const isPost60PostgresQuery = `
-select (mandatory >= 6000000)::int
-from dbversion
-`
-const isPost60MysqlQuery = `
-select mandatory >= 6000000
-from dbversion
-`
+const hostCacheQuery70 = `
+  case when i.useip = 1 then i.ip else i.dns end                     as ip_or_dns,
+		 h.host                                                             as hostname,
+		 coalesce(p.name, case when z.name = '' then null else z.name end) as proxy_hostname
+  from hosts h
+		   join interface i on i.hostid = h.hostid
+		   join items i2 on i2.hostid = h.hostid
+		   join ha_node z on z.status = 3
+		   left join proxy p on p.proxyid = h.proxyid
+  where i2.key_ = $1
+	-- item type is Zabbix trapper
+	and i2.type = 2
+	-- host is active and monitored
+	and h.status = 0
+	-- ip of snmp interface
+	and i.type = 2`
+
+const checkVersionPostgresQuery = `
+  select mandatory::int
+  from dbversion
+  `
+const checkVersionMysqlQuery = `
+  select cast(mandatory as signed)
+  from dbversion
+  `
 
 type ZabbixLookup struct {
 	conf       *ZabbixTrapperConfig
@@ -100,12 +118,12 @@ func (z *ZabbixLookup) refresh() {
 			z.logger.Warn().Err(err).Msg("failed connecting to db")
 			return
 		}
-		var isPost60 int
+		var version int
 		switch driver {
 		case "pgx":
-			err = sqlscan.Get(ctx, db, &isPost60, isPost60PostgresQuery)
+			err = sqlscan.Get(ctx, db, &version, checkVersionPostgresQuery)
 		case "mysql":
-			err = sqlscan.Get(ctx, db, &isPost60, isPost60MysqlQuery)
+			err = sqlscan.Get(ctx, db, &version, checkVersionMysqlQuery)
 		default:
 			z.logger.Fatal().Msgf("unknown driver: %s", driver)
 			return
@@ -115,13 +133,15 @@ func (z *ZabbixLookup) refresh() {
 			return
 		}
 		var results []QueryResult
-		switch isPost60 {
-		case 0:
-			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPre60, z.conf.ItemKey)
-		case 1:
+		switch {
+		case version >= 7000000:
+			err = sqlscan.Select(ctx, db, &results, hostCacheQuery70, z.conf.ItemKey)
+		case version >= 6000000:
 			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPost60, z.conf.ItemKey)
+		case version < 6000000:
+			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPre60, z.conf.ItemKey)
 		default:
-			z.logger.Error().Msg("unexpected error, incorrect isPost60 result")
+			z.logger.Error().Msg("unexpected error, incorrect version result")
 			return
 		}
 		if err != nil {
