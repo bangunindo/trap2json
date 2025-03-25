@@ -298,7 +298,7 @@ func proxyReload(t *testing.T, ctx context.Context) {
 				"-R",
 				"config_cache_reload",
 			})
-			if assert.NoError(t, err) {
+			if !assert.NoError(t, err) {
 				break
 			}
 			r, err := c.Resource.Logs(ctx)
