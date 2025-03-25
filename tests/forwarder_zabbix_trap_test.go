@@ -18,7 +18,24 @@ import (
 	tc "github.com/testcontainers/testcontainers-go"
 )
 
-func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
+func getRequestClient(ctx context.Context) *requests.Builder {
+	zabbixWeb := GetContainerByName("t2j-zabbix-web")
+	zabbixPort, _ := zabbixWeb.Resource.MappedPort(ctx, "8080/tcp")
+	URL := fmt.Sprintf("http://localhost:%d/api_jsonrpc.php", zabbixPort.Int())
+
+	reqBuilder := requests.
+		URL(URL).
+		Transport(&http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}).
+		ContentType("application/json-rpc").
+		Accept("application/json")
+
+	return reqBuilder
+}
+
+func getZabbixSession(t *testing.T, client *requests.Builder, ctx context.Context) *zabbix.Session {
+	var resp *zabbix.Response
 	zabbixWeb := GetContainerByName("t2j-zabbix-web")
 	if !assert.NotNil(t, zabbixWeb) {
 		return nil
@@ -36,7 +53,10 @@ func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
 		"username": "Admin",
 		"password": "zabbix",
 	}
-	resp, err := session.Do(zabbix.NewRequest("user.login", params))
+	req := zabbix.NewRequest("user.login", params)
+	err = client.BodyJSON(req).ToJSON(&resp).Fetch(ctx)
+
+	//resp, err := session.Do(zabbix.NewRequest("user.login", params))
 	if assert.NoError(t, err) {
 		err = resp.Bind(&session.Token)
 		assert.NoError(t, err)
@@ -44,16 +64,8 @@ func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
 	return session
 }
 
-func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
+func zabbixSetup(t *testing.T, client *requests.Builder, session *zabbix.Session) (hostIds [][2]string) {
 	var resp *zabbix.Response
-	url := session.URL
-	reqBuilder := requests.
-		URL(url).
-		Transport(&http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}).
-		ContentType("application/json-rpc").
-		Accept("application/json")
 
 	respTemplate := make(map[string][]string)
 	// create template
@@ -67,7 +79,7 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 		},
 	)
 
-	err := reqBuilder.Bearer(session.Token).BodyJSON(req).ToJSON(&resp).Fetch(context.Background())
+	err := client.Bearer(session.Token).BodyJSON(req).ToJSON(&resp).Fetch(context.Background())
 	// resp, err := session.Do(req)
 	assert.NoError(t, err)
 	err = resp.Bind(&respTemplate)
@@ -323,11 +335,12 @@ func TestZabbixTrapForwarder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	session := getZabbixSession(t, ctx)
+	client := getRequestClient(ctx)
+	session := getZabbixSession(t, client, ctx)
 	if !assert.NotNil(t, session) {
 		return
 	}
-	hostIds := zabbixSetup(t, session)
+	hostIds := zabbixSetup(t, client, session)
 	if t.Failed() {
 		return
 	}
