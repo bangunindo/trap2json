@@ -317,8 +317,9 @@ func proxyReload(t *testing.T, ctx context.Context) {
 	}
 }
 
-func zabbixAssert(t *testing.T, session *zabbix.Session, hostid [2]string) {
-	resp, err := session.Do(zabbix.NewRequest(
+func zabbixAssert(t *testing.T, client *requests.Builder, session *zabbix.Session, hostid [2]string) {
+	var resp *zabbix.Response
+	req := zabbix.NewRequest(
 		"history.get",
 		map[string]any{
 			"history": 4,
@@ -326,7 +327,8 @@ func zabbixAssert(t *testing.T, session *zabbix.Session, hostid [2]string) {
 			"output":  "extend",
 			"limit":   "1",
 		},
-	))
+	)
+	err := client.Bearer(session.Token).BodyJSON(req).ToJSON(&resp).Fetch(context.Background())
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -393,6 +395,6 @@ func TestZabbixTrapForwarder(t *testing.T) {
 	}
 	time.Sleep(5 * time.Second)
 	for _, hostId := range hostIds {
-		zabbixAssert(t, session, hostId)
+		zabbixAssert(t, client, session, hostId)
 	}
 }
