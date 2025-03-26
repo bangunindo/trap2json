@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/cavaliercoder/go-zabbix"
-	"github.com/stretchr/testify/assert"
-	tc "github.com/testcontainers/testcontainers-go"
 	"io"
 	"os/exec"
 	"path"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cavaliercoder/go-zabbix"
+	"github.com/stretchr/testify/assert"
+	tc "github.com/testcontainers/testcontainers-go"
 )
 
 func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
