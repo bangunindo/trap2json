@@ -92,7 +92,7 @@ var containers = []*ContainerInfo{
 			Mounts: tc.ContainerMounts{
 				tc.ContainerMount{
 					Source: tc.GenericBindMountSource{
-						HostPath: path.Join(wd, "/tests/forwarder_mqtt_test.conf"),
+						HostPath: path.Join(wd, "tests/forwarder_mqtt_test.conf"),
 					},
 					Target: "/mosquitto/config/mosquitto.conf",
 				},
@@ -146,7 +146,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-7.2.2",
 			Name:         "t2j-zabbix-proxy-01",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
@@ -159,7 +159,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-7.2.2",
 			Name:         "t2j-zabbix-proxy-02",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
