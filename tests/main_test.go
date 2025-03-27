@@ -66,38 +66,41 @@ var tfContainer = &ContainerInfo{
 var containers = []*ContainerInfo{
 	{
 		Container: tc.ContainerRequest{
-			Image:        "bitnami/kafka:3.5.0",
+			Image:        "bitnami/kafka:4.0.0",
 			Name:         "t2j-kafka",
+			Hostname:     "t2j-kafka",
 			ExposedPorts: []string{"9094:9094/tcp"},
 			Env: map[string]string{
 				"ALLOW_PLAINTEXT_LISTENER":                 "yes",
-				"KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE":      "true",
+				"KAFKA_CFG_NODE_ID":                        "0",
+				"KAFKA_CFG_PROCESS_ROLES":                  "controller,broker",
 				"KAFKA_CFG_LISTENERS":                      "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094",
 				"KAFKA_CFG_ADVERTISED_LISTENERS":           "PLAINTEXT://t2j-kafka:9092,EXTERNAL://localhost:9094",
+				"KAFKA_CFG_CONTROLLER_QUORUM_VOTERS":       "0@t2j-kafka:9093",
+				"KAFKA_CFG_CONTROLLER_LISTENER_NAMES":      "CONTROLLER",
 				"KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP": "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+				"KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE":      "true",
 			},
 			WaitingFor: wait.ForLog("Kafka Server started"),
 		},
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "eclipse-mosquitto:2.0.15",
+			Image:        "eclipse-mosquitto:2.0.21",
 			Name:         "t2j-mqtt",
 			ExposedPorts: []string{"1883/tcp"},
-			WaitingFor:   wait.ForLog("mosquitto version 2.0.15 running"),
-			Mounts: tc.ContainerMounts{
-				tc.ContainerMount{
-					Source: tc.GenericBindMountSource{
-						HostPath: path.Join(wd, "tests/forwarder_mqtt_test.conf"),
-					},
-					Target: "/mosquitto/config/mosquitto.conf",
+			WaitingFor:   wait.ForLog("mosquitto version 2.0.21 running"),
+			Files: []tc.ContainerFile{
+				{
+					HostFilePath:      path.Join(wd, "tests/forwarder_mqtt_test.conf"),
+					ContainerFilePath: "/mosquitto/config/mosquitto.conf",
 				},
 			},
 		},
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "postgres:15",
+			Image:        "postgres:17",
 			Name:         "t2j-postgres",
 			ExposedPorts: []string{"5432/tcp"},
 			Env: map[string]string{
@@ -110,7 +113,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-server-pgsql:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-server-pgsql:alpine-7.2.4",
 			Name:         "t2j-zabbix-server",
 			ExposedPorts: []string{"10051/tcp"},
 			Env: map[string]string{
@@ -124,7 +127,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-web-nginx-pgsql:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-web-nginx-pgsql:alpine-7.2.4",
 			Name:         "t2j-zabbix-web",
 			ExposedPorts: []string{"8080/tcp"},
 			Env: map[string]string{
@@ -139,7 +142,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-proxy-sqlite3:alpine-7.2.4",
 			Name:         "t2j-zabbix-proxy-01",
 			ExposedPorts: []string{"10051/tcp"},
 			Env: map[string]string{
@@ -151,7 +154,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
+			Image:        "zabbix/zabbix-proxy-sqlite3:alpine-7.2.4",
 			Name:         "t2j-zabbix-proxy-02",
 			ExposedPorts: []string{"10051/tcp"},
 			Env: map[string]string{
@@ -221,8 +224,11 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed getting docker info %s", err)
 	}
 	operatingSystem = inf.OperatingSystem
+	tfContainer.Container.Networks = []string{network.Name}
 
 	for _, c := range containers {
+		log.Printf("creating container %s\n", c.Container.Name)
+		c.Container.Networks = []string{network.Name}
 		ctr, err := tc.GenericContainer(
 			ctx,
 			tc.GenericContainerRequest{
@@ -251,6 +257,7 @@ func TestMain(m *testing.M) {
 				log.Fatalf("failed creating kafka topic %s", err)
 			}
 		}
+		log.Printf("created container %s\n", c.Container.Name)
 	}
 
 	code := m.Run()

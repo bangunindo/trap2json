@@ -319,13 +319,10 @@ func TestZabbixTrapForwarder(t *testing.T) {
 		return
 	}
 
-	tfContainer.Container.Mounts = tc.ContainerMounts{
-		tc.ContainerMount{
-			Source: tc.GenericBindMountSource{
-				HostPath: path.Join(wd, "tests/forwarder_zabbix_trap_test.yaml"),
-			},
-			Target:   "/etc/trap2json/config.yml",
-			ReadOnly: true,
+	tfContainer.Container.Files = []tc.ContainerFile{
+		{
+			HostFilePath:      path.Join(wd, "tests/forwarder_zabbix_trap_test.yaml"),
+			ContainerFilePath: "/etc/trap2json/config.yml",
 		},
 	}
 	setup(ctx, tfContainer)

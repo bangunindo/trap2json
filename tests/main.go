@@ -26,7 +26,7 @@ func setup(ctx context.Context, container *ContainerInfo) {
 }
 
 func teardown(ctx context.Context, container *ContainerInfo) {
-	container.Container.Mounts = tc.ContainerMounts{}
+	container.Container.Files = nil
 	if err := container.Resource.Terminate(ctx); err != nil {
 		log.Printf("failed terminating container %s\n", container.Container.Name)
 	}
