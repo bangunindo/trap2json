@@ -18,9 +18,32 @@ import (
 	tc "github.com/testcontainers/testcontainers-go"
 )
 
-func getRequestClient(ctx context.Context) *requests.Builder {
+// func getRequestClient(ctx context.Context) *requests.Builder {
+// 	zabbixWeb := GetContainerByName("t2j-zabbix-web")
+// 	zabbixPort, _ := zabbixWeb.Resource.MappedPort(ctx, "8080/tcp")
+// 	URL := fmt.Sprintf("http://localhost:%d/api_jsonrpc.php", zabbixPort.Int())
+
+// 	reqBuilder := requests.
+// 		URL(URL).
+// 		Transport(&http.Transport{
+// 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+// 		}).
+// 		ContentType("application/json-rpc").
+// 		Accept("application/json")
+
+// 	return reqBuilder
+// }
+
+func getZabbixSession(t *testing.T, ctx context.Context) (*requests.Builder, *zabbix.Session) {
+	var resp *zabbix.Response
 	zabbixWeb := GetContainerByName("t2j-zabbix-web")
-	zabbixPort, _ := zabbixWeb.Resource.MappedPort(ctx, "8080/tcp")
+	if !assert.NotNil(t, zabbixWeb) {
+		return nil, nil
+	}
+	zabbixPort, err := zabbixWeb.Resource.MappedPort(ctx, "8080/tcp")
+	if !assert.NoError(t, err) {
+		return nil, nil
+	}
 	URL := fmt.Sprintf("http://localhost:%d/api_jsonrpc.php", zabbixPort.Int())
 
 	reqBuilder := requests.
@@ -31,22 +54,10 @@ func getRequestClient(ctx context.Context) *requests.Builder {
 		ContentType("application/json-rpc").
 		Accept("application/json")
 
-	return reqBuilder
-}
-
-func getZabbixSession(t *testing.T, client *requests.Builder, ctx context.Context) *zabbix.Session {
-	var resp *zabbix.Response
-	zabbixWeb := GetContainerByName("t2j-zabbix-web")
-	if !assert.NotNil(t, zabbixWeb) {
-		return nil
-	}
-	zabbixPort, err := zabbixWeb.Resource.MappedPort(ctx, "8080/tcp")
-	if !assert.NoError(t, err) {
-		return nil
-	}
 	session := &zabbix.Session{
 		URL: fmt.Sprintf("http://localhost:%d/api_jsonrpc.php", zabbixPort.Int()),
 	}
+
 	_, err = session.GetVersion()
 	assert.NoError(t, err)
 	params := map[string]string{
@@ -54,14 +65,14 @@ func getZabbixSession(t *testing.T, client *requests.Builder, ctx context.Contex
 		"password": "zabbix",
 	}
 	req := zabbix.NewRequest("user.login", params)
-	err = client.BodyJSON(req).ToJSON(&resp).Fetch(ctx)
+	err = reqBuilder.BodyJSON(req).ToJSON(&resp).Fetch(ctx)
 
 	//resp, err := session.Do(zabbix.NewRequest("user.login", params))
 	if assert.NoError(t, err) {
 		err = resp.Bind(&session.Token)
 		assert.NoError(t, err)
 	}
-	return session
+	return reqBuilder, session
 }
 
 func zabbixSetup(t *testing.T, client *requests.Builder, session *zabbix.Session) (hostIds [][2]string) {
@@ -349,8 +360,8 @@ func TestZabbixTrapForwarder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	client := getRequestClient(ctx)
-	session := getZabbixSession(t, client, ctx)
+	// client := getRequestClient(ctx)
+	client, session := getZabbixSession(t, ctx)
 	if !assert.NotNil(t, session) {
 		return
 	}
@@ -379,6 +390,7 @@ func TestZabbixTrapForwarder(t *testing.T) {
 			if r, err := tfContainer.Resource.Logs(ctx); err == nil {
 				if logs, err := io.ReadAll(r); err == nil {
 					fmt.Println(string(logs))
+					fmt.Println(err.Error())
 				}
 			}
 		}

@@ -146,7 +146,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-7.2.2",
+			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
 			Name:         "t2j-zabbix-proxy-01",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
@@ -159,7 +159,7 @@ var containers = []*ContainerInfo{
 	},
 	{
 		Container: tc.ContainerRequest{
-			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-7.2.2",
+			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
 			Name:         "t2j-zabbix-proxy-02",
 			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
@@ -274,6 +274,7 @@ func TestMain(m *testing.M) {
 	for _, c := range containers {
 		if err := c.Resource.Terminate(ctx); err != nil {
 			log.Printf("failed terminating container %s\n", c.Container.Name)
+			log.Println(err.Error())
 		}
 	}
 	_ = network.Remove(ctx)
