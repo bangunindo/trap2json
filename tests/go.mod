@@ -1,8 +1,11 @@
 module github.com/bangunindo/trap2json/tests
 
-go 1.21
+go 1.22
+
+toolchain go1.23.7
 
 require (
+	github.com/carlmjohnson/requests v0.23.5
 	github.com/cavaliercoder/go-zabbix v0.0.0-20230131181515-93725c39d639
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/go-json-experiment/json v0.0.0-20231102232822-2e55bd4e08b0
