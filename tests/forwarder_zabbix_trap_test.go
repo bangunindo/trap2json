@@ -265,8 +265,8 @@ func zabbixSetup(t *testing.T, ctx context.Context, session *requests.Builder) (
 		session,
 		"proxy.create",
 		map[string]any{
-			"host":   "zabbix-proxy-01",
-			"status": 5,
+			"name":           "zabbix-proxy-01",
+			"operating_mode": "0",
 			"hosts": []map[string]any{
 				{
 					"hostid": hostProxy1,
@@ -281,8 +281,8 @@ func zabbixSetup(t *testing.T, ctx context.Context, session *requests.Builder) (
 		session,
 		"proxy.create",
 		map[string]any{
-			"host":   "zabbix-proxy-02",
-			"status": 5,
+			"name":           "zabbix-proxy-02",
+			"operating_mode": "0",
 			"hosts": []map[string]any{
 				{
 					"hostid": hostProxy2,
