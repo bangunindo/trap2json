@@ -16,13 +16,10 @@ import (
 func TestMqttForwarder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	tfContainer.Container.Mounts = tc.ContainerMounts{
-		tc.ContainerMount{
-			Source: tc.GenericBindMountSource{
-				HostPath: path.Join(wd, "tests/forwarder_mqtt_test.yaml"),
-			},
-			Target:   "/etc/trap2json/config.yml",
-			ReadOnly: true,
+	tfContainer.Container.Files = []tc.ContainerFile{
+		{
+			HostFilePath:      path.Join(wd, "tests/forwarder_mqtt_test.yaml"),
+			ContainerFilePath: "/etc/trap2json/config.yml",
 		},
 	}
 	setup(ctx, tfContainer)

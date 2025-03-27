@@ -25,7 +25,24 @@ type LookupResult struct {
 	Hostname string
 }
 
-const hostCacheQueryPost60 = `
+const hostCacheQuery70 = `
+select case when i.useip = 1 then i.ip else i.dns end                    as ip_or_dns,
+       h.host                                                            as hostname,
+       coalesce(p.name, case when z.name = '' then null else z.name end) as proxy_hostname
+from hosts h
+         join interface i on i.hostid = h.hostid
+         join items i2 on i2.hostid = h.hostid
+         join ha_node z on z.status = 3
+         left join proxy p on p.proxyid = h.proxyid
+where i2.key_ = $1
+  -- item type is Zabbix trapper
+  and i2.type = 2
+  -- host is active and monitored
+  and h.status = 0
+  -- ip of snmp interface
+  and i.type = 2`
+
+const hostCacheQuery60 = `
 select case when i.useip = 1 then i.ip else i.dns end                     as ip_or_dns,
        h.host                                                             as hostname,
        coalesce(hp.host, case when z.name = '' then null else z.name end) as proxy_hostname
@@ -57,15 +74,6 @@ where i2.key_ = $1
   and h.status = 0
   -- ip of snmp interface
   and i.type = 2`
-
-const isPost60PostgresQuery = `
-select (mandatory >= 6000000)::int
-from dbversion
-`
-const isPost60MysqlQuery = `
-select mandatory >= 6000000
-from dbversion
-`
 
 type ZabbixLookup struct {
 	conf       *ZabbixTrapperConfig
@@ -100,28 +108,22 @@ func (z *ZabbixLookup) refresh() {
 			z.logger.Warn().Err(err).Msg("failed connecting to db")
 			return
 		}
-		var isPost60 int
-		switch driver {
-		case "pgx":
-			err = sqlscan.Get(ctx, db, &isPost60, isPost60PostgresQuery)
-		case "mysql":
-			err = sqlscan.Get(ctx, db, &isPost60, isPost60MysqlQuery)
-		default:
-			z.logger.Fatal().Msgf("unknown driver: %s", driver)
-			return
-		}
+		var zbxVersion int
+		err = sqlscan.Get(ctx, db, &zbxVersion, "select mandatory from dbversion")
 		if err != nil {
 			z.logger.Warn().Err(err).Msg("cannot determine zabbix version")
 			return
 		}
 		var results []QueryResult
-		switch isPost60 {
-		case 0:
+		switch {
+		case zbxVersion >= 7000000:
+			err = sqlscan.Select(ctx, db, &results, hostCacheQuery70, z.conf.ItemKey)
+		case zbxVersion >= 6000000:
+			err = sqlscan.Select(ctx, db, &results, hostCacheQuery60, z.conf.ItemKey)
+		case zbxVersion < 6000000:
 			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPre60, z.conf.ItemKey)
-		case 1:
-			err = sqlscan.Select(ctx, db, &results, hostCacheQueryPost60, z.conf.ItemKey)
 		default:
-			z.logger.Error().Msg("unexpected error, incorrect isPost60 result")
+			z.logger.Error().Msgf("unexpected error, unsupported version %d", zbxVersion)
 			return
 		}
 		if err != nil {
