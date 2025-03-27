@@ -71,6 +71,7 @@ var Functions = []expr.Option{
 			}
 		},
 		new(func([]map[string]any) map[string]any),
+		new(func([]any) map[string]any),
 	),
 	expr.Function(
 		"OidValueAny",

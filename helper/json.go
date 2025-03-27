@@ -8,7 +8,7 @@ import (
 const defaultTimeLayout = time.RFC3339Nano
 
 func JSONTimeMarshaller(layout, tz string) *json.Marshalers {
-	return json.MarshalFuncV1(
+	return json.MarshalFunc(
 		func(t time.Time) ([]byte, error) {
 			switch layout {
 			case "unix":

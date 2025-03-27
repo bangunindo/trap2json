@@ -343,11 +343,9 @@ func (m *Message) Compile(conf MessageCompiler) {
 		var res any
 		if res, err = expr.Run(conf.JSONFormat, *m.Payload); err == nil {
 			payload, err = json.Marshal(res, json.WithMarshalers(
-				json.NewMarshalers(
-					helper.JSONTimeMarshaller(
-						m.Metadata.TimeFormat,
-						m.Metadata.TimeAsTimezone,
-					),
+				helper.JSONTimeMarshaller(
+					m.Metadata.TimeFormat,
+					m.Metadata.TimeAsTimezone,
 				),
 			))
 			if err != nil {
@@ -360,11 +358,9 @@ func (m *Message) Compile(conf MessageCompiler) {
 	}
 	if payload == nil {
 		payload, err = json.Marshal(m.Payload, json.WithMarshalers(
-			json.NewMarshalers(
-				helper.JSONTimeMarshaller(
-					m.Metadata.TimeFormat,
-					m.Metadata.TimeAsTimezone,
-				),
+			helper.JSONTimeMarshaller(
+				m.Metadata.TimeFormat,
+				m.Metadata.TimeAsTimezone,
 			),
 		))
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/assert"
 	tc "github.com/testcontainers/testcontainers-go"
+	nt "github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"log"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"testing"
 )
 
-const networkName = "t2j-testing"
 const trapPort = "10162/udp"
 
 var operatingSystem = ""
@@ -59,7 +59,6 @@ var tfContainer = &ContainerInfo{
 			Dockerfile: "Dockerfile",
 		},
 		Name:         "t2j-trap2json",
-		Networks:     []string{networkName},
 		ExposedPorts: []string{trapPort},
 		WaitingFor:   wait.ForLog("trap2json started"),
 	},
@@ -70,7 +69,6 @@ var containers = []*ContainerInfo{
 			Image:        "bitnami/kafka:3.5.0",
 			Name:         "t2j-kafka",
 			ExposedPorts: []string{"9094:9094/tcp"},
-			Networks:     []string{networkName},
 			Env: map[string]string{
 				"ALLOW_PLAINTEXT_LISTENER":                 "yes",
 				"KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE":      "true",
@@ -85,7 +83,6 @@ var containers = []*ContainerInfo{
 		Container: tc.ContainerRequest{
 			Image:        "eclipse-mosquitto:2.0.15",
 			Name:         "t2j-mqtt",
-			Networks:     []string{networkName},
 			ExposedPorts: []string{"1883/tcp"},
 			WaitingFor:   wait.ForLog("mosquitto version 2.0.15 running"),
 			Mounts: tc.ContainerMounts{
@@ -102,7 +99,6 @@ var containers = []*ContainerInfo{
 		Container: tc.ContainerRequest{
 			Image:        "postgres:15",
 			Name:         "t2j-postgres",
-			Networks:     []string{networkName},
 			ExposedPorts: []string{"5432/tcp"},
 			Env: map[string]string{
 				"POSTGRES_PASSWORD": "test",
@@ -116,7 +112,6 @@ var containers = []*ContainerInfo{
 		Container: tc.ContainerRequest{
 			Image:        "zabbix/zabbix-server-pgsql:ubuntu-6.4.4",
 			Name:         "t2j-zabbix-server",
-			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
 			Env: map[string]string{
 				"DB_SERVER_HOST":    "t2j-postgres",
@@ -131,7 +126,6 @@ var containers = []*ContainerInfo{
 		Container: tc.ContainerRequest{
 			Image:        "zabbix/zabbix-web-nginx-pgsql:ubuntu-6.4.4",
 			Name:         "t2j-zabbix-web",
-			Networks:     []string{networkName},
 			ExposedPorts: []string{"8080/tcp"},
 			Env: map[string]string{
 				"ZBX_SERVER_HOST":   "t2j-zabbix-server",
@@ -147,7 +141,6 @@ var containers = []*ContainerInfo{
 		Container: tc.ContainerRequest{
 			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
 			Name:         "t2j-zabbix-proxy-01",
-			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
 			Env: map[string]string{
 				"ZBX_SERVER_HOST": "t2j-zabbix-server",
@@ -160,7 +153,6 @@ var containers = []*ContainerInfo{
 		Container: tc.ContainerRequest{
 			Image:        "zabbix/zabbix-proxy-sqlite3:ubuntu-6.4.4",
 			Name:         "t2j-zabbix-proxy-02",
-			Networks:     []string{networkName},
 			ExposedPorts: []string{"10051/tcp"},
 			Env: map[string]string{
 				"ZBX_SERVER_HOST": "t2j-zabbix-server",
@@ -216,18 +208,11 @@ func GetContainerByName(name string) *ContainerInfo {
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	network, err := tc.GenericNetwork(
-		ctx,
-		tc.GenericNetworkRequest{
-			NetworkRequest: tc.NetworkRequest{
-				Name: networkName,
-			},
-		},
-	)
+	network, err := nt.New(ctx)
 	if err != nil {
 		log.Fatalf("failed creating network %s", err)
 	}
-	dc, err := tc.NewDockerClient()
+	dc, err := tc.NewDockerClientWithOpts(ctx)
 	if err != nil {
 		log.Fatalf("failed connecting docker %s", err)
 	}
