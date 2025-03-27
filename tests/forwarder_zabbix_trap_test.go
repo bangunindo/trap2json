@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/cavaliercoder/go-zabbix"
+	"github.com/carlmjohnson/requests"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	tc "github.com/testcontainers/testcontainers-go"
 	"io"
@@ -14,7 +16,47 @@ import (
 	"time"
 )
 
-func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
+type APIError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    string `json:"data"`
+}
+
+type APIResponse struct {
+	JSONRpc string          `json:"jsonrpc"`
+	ID      int             `json:"id"`
+	Result  json.RawMessage `json:"result"`
+	Error   *APIError       `json:"error"`
+}
+
+func (z *APIResponse) Bind(data any) error {
+	return json.Unmarshal(z.Result, data)
+}
+
+func CallAPI(ctx context.Context, session *requests.Builder, method string, params any, resp any) error {
+	var apiResp APIResponse
+	err := session.
+		BodyJSON(map[string]any{
+			"jsonrpc": "2.0",
+			"method":  method,
+			"id":      1,
+			"params":  params,
+		}).
+		ToJSON(&apiResp).
+		Fetch(ctx)
+	if err != nil {
+		return err
+	}
+	if apiResp.Error != nil {
+		return errors.Errorf("api error: %v", apiResp.Error)
+	}
+	if resp != nil {
+		err = apiResp.Bind(resp)
+	}
+	return err
+}
+
+func getZabbixSession(t *testing.T, ctx context.Context) *requests.Builder {
 	zabbixWeb := GetContainerByName("t2j-zabbix-web")
 	if !assert.NotNil(t, zabbixWeb) {
 		return nil
@@ -23,27 +65,27 @@ func getZabbixSession(t *testing.T, ctx context.Context) *zabbix.Session {
 	if !assert.NoError(t, err) {
 		return nil
 	}
-	session := &zabbix.Session{
-		URL: fmt.Sprintf("http://localhost:%d/api_jsonrpc.php", zabbixPort.Int()),
-	}
-	_, err = session.GetVersion()
-	assert.NoError(t, err)
+	session := requests.
+		URL(fmt.Sprintf("http://localhost:%d/api_jsonrpc.php", zabbixPort.Int()))
 	params := map[string]string{
 		"username": "Admin",
 		"password": "zabbix",
 	}
-	resp, err := session.Do(zabbix.NewRequest("user.login", params))
-	if assert.NoError(t, err) {
-		err = resp.Bind(&session.Token)
-		assert.NoError(t, err)
+	var token string
+	err = CallAPI(ctx, session, "user.login", params, &token)
+	if !assert.NoError(t, err) {
+		return nil
 	}
+	session = session.Header("Authorization", "Bearer "+token)
 	return session
 }
 
-func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
+func zabbixSetup(t *testing.T, ctx context.Context, session *requests.Builder) (hostIds [][2]string) {
 	respTemplate := make(map[string][]string)
 	// create template
-	resp, err := session.Do(zabbix.NewRequest(
+	err := CallAPI(
+		ctx,
+		session,
 		"template.create",
 		map[string]any{
 			"host": "Zabbix trapper template",
@@ -51,13 +93,14 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				"groupid": 1,
 			},
 		},
-	))
-	assert.NoError(t, err)
-	err = resp.Bind(&respTemplate)
+		&respTemplate,
+	)
 	assert.NoError(t, err)
 	templateId := respTemplate["templateids"][0]
 	// create zabbix trapper item
-	_, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"item.create",
 		map[string]any{
 			"name":   "SNMP Trap",
@@ -68,12 +111,15 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 			// text item type
 			"value_type": 4,
 		},
-	))
+		nil,
+	)
 	assert.NoError(t, err)
 	// create 4 hosts
 	// each is for zabbix server, zabbix proxy 1, zabbix proxy 2, and default host
 	hostResp := make(map[string][]string)
-	resp, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"host.create",
 		map[string]any{
 			"host": "test-host",
@@ -102,12 +148,13 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				},
 			},
 		},
-	))
-	assert.NoError(t, err)
-	err = resp.Bind(&hostResp)
+		&hostResp,
+	)
 	assert.NoError(t, err)
 	hostIds = append(hostIds, [2]string{hostResp["hostids"][0], "10.0.0.0"})
-	resp, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"host.create",
 		map[string]any{
 			"host": "test-host-server",
@@ -136,12 +183,13 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				},
 			},
 		},
-	))
-	assert.NoError(t, err)
-	err = resp.Bind(&hostResp)
+		&hostResp,
+	)
 	assert.NoError(t, err)
 	hostIds = append(hostIds, [2]string{hostResp["hostids"][0], "10.0.0.1"})
-	resp, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"host.create",
 		map[string]any{
 			"host": "test-host-proxy-01",
@@ -170,13 +218,14 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				},
 			},
 		},
-	))
-	assert.NoError(t, err)
-	err = resp.Bind(&hostResp)
+		&hostResp,
+	)
 	assert.NoError(t, err)
 	hostIds = append(hostIds, [2]string{hostResp["hostids"][0], "10.0.0.2"})
 	hostProxy1 := hostResp["hostids"][0]
-	resp, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"host.create",
 		map[string]any{
 			"host": "test-host-proxy-02",
@@ -205,14 +254,15 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				},
 			},
 		},
-	))
-	assert.NoError(t, err)
-	err = resp.Bind(&hostResp)
+		&hostResp,
+	)
 	assert.NoError(t, err)
 	hostIds = append(hostIds, [2]string{hostResp["hostids"][0], "10.0.0.3"})
 	hostProxy2 := hostResp["hostids"][0]
 	// create proxies
-	_, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"proxy.create",
 		map[string]any{
 			"host":   "zabbix-proxy-01",
@@ -223,9 +273,12 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				},
 			},
 		},
-	))
+		nil,
+	)
 	assert.NoError(t, err)
-	_, err = session.Do(zabbix.NewRequest(
+	err = CallAPI(
+		ctx,
+		session,
 		"proxy.create",
 		map[string]any{
 			"host":   "zabbix-proxy-02",
@@ -236,7 +289,8 @@ func zabbixSetup(t *testing.T, session *zabbix.Session) (hostIds [][2]string) {
 				},
 			},
 		},
-	))
+		nil,
+	)
 	assert.NoError(t, err)
 	return hostIds
 }
@@ -276,8 +330,11 @@ func proxyReload(t *testing.T, ctx context.Context) {
 	}
 }
 
-func zabbixAssert(t *testing.T, session *zabbix.Session, hostid [2]string) {
-	resp, err := session.Do(zabbix.NewRequest(
+func zabbixAssert(t *testing.T, ctx context.Context, session *requests.Builder, hostid [2]string) {
+	var historyResp []map[string]string
+	err := CallAPI(
+		ctx,
+		session,
 		"history.get",
 		map[string]any{
 			"history": 4,
@@ -285,12 +342,8 @@ func zabbixAssert(t *testing.T, session *zabbix.Session, hostid [2]string) {
 			"output":  "extend",
 			"limit":   "1",
 		},
-	))
-	if !assert.NoError(t, err) {
-		return
-	}
-	var historyResp []map[string]string
-	err = resp.Bind(&historyResp)
+		&historyResp,
+	)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -310,7 +363,7 @@ func TestZabbixTrapForwarder(t *testing.T) {
 	if !assert.NotNil(t, session) {
 		return
 	}
-	hostIds := zabbixSetup(t, session)
+	hostIds := zabbixSetup(t, ctx, session)
 	if t.Failed() {
 		return
 	}
@@ -348,6 +401,6 @@ func TestZabbixTrapForwarder(t *testing.T) {
 	}
 	time.Sleep(5 * time.Second)
 	for _, hostId := range hostIds {
-		zabbixAssert(t, session, hostId)
+		zabbixAssert(t, ctx, session, hostId)
 	}
 }
