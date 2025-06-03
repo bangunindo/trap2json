@@ -13,10 +13,12 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
+	"net"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type KafkaSaslMechanism int
@@ -85,7 +87,12 @@ func (k *Kafka) Run() {
 	defer k.cancel()
 	defer k.logger.Info().Msg("forwarder exited")
 	k.logger.Info().Msg("starting forwarder")
-	transport := kafka.DefaultTransport.(*kafka.Transport)
+	transport := &kafka.Transport{
+		Dial: (&net.Dialer{
+			Timeout:   3 * time.Second,
+			DualStack: true,
+		}).DialContext,
+	}
 	if k.config.Kafka.Tls != nil {
 		tlsConf := &tls.Config{
 			InsecureSkipVerify: k.config.Kafka.Tls.InsecureSkipVerify,
