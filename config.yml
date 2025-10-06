@@ -343,6 +343,11 @@ snmptrapd:
     # - v3 will work on specified no_auth/require_privacy config
     # default: false
     enable: false
+    # this flag will allow any v1/v2c community to work together with v3, override "enable: true" behavior
+    # if this is enabled, it will only work for listed v1/v2c community
+    # if this is disabled, it will ignore v1/v2c community list
+    # default: false
+    strict_community: false
     # community name list for v1 and v2
     community:
       - name: public

@@ -2,10 +2,11 @@ package snmp
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type Community struct {
@@ -134,6 +135,8 @@ func (u User) SecurityLevel() string {
 type AuthConfig struct {
 	// Enable auth for v1 and v2. v3 still needs users to be defined
 	Enable bool
+	// Enable any v2 community to work with v3
+	StrictCommunity bool
 	// Community for snmp V1 and V2
 	Community []Community
 	// User for snmp v3
@@ -195,8 +198,10 @@ format2 %s%%a|%%b|%%t|%%T|%%W|%%N|%%P|%%w|%%q|%%v%s\n
 	if !c.Auth.Enable {
 		trapConf += "disableAuthorization yes\n"
 	} else {
-		for _, comm := range c.Auth.Community {
-			trapConf += fmt.Sprintf("authCommunity log %s\n", comm.Name)
+		if c.Auth.StrictCommunity {
+			for _, comm := range c.Auth.Community {
+				trapConf += fmt.Sprintf("authCommunity log %s\n", comm.Name)
+			}
 		}
 	}
 	for _, user := range c.Auth.User {
