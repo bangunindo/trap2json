@@ -198,7 +198,7 @@ func (m *Message) UnmarshalText(text []byte) error {
 	if trapType, err := strconv.ParseInt(row[HeaderTrapType], 10, 64); err == nil {
 		m.Payload.TrapType = &trapType
 	}
-	if trapSubType, err := strconv.ParseInt(row[HeaderTrapSubType], 10, 64); err == nil {
+	if trapSubType, err := strconv.ParseInt(strings.TrimLeft(row[HeaderTrapSubType], "."), 10, 64); err == nil {
 		m.Payload.TrapSubType = &trapSubType
 	}
 	// security info is using the following format:
