@@ -2,15 +2,16 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+	"path"
+	"testing"
+
 	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/assert"
 	tc "github.com/testcontainers/testcontainers-go"
 	nt "github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"log"
-	"os"
-	"path"
-	"testing"
 )
 
 const trapPort = "10162/udp"
@@ -66,7 +67,7 @@ var tfContainer = &ContainerInfo{
 var containers = []*ContainerInfo{
 	{
 		Container: tc.ContainerRequest{
-			Image:        "bitnami/kafka:4.0.0",
+			Image:        "bitnamilegacy/kafka:4.0.0-debian-12-r10",
 			Name:         "t2j-kafka",
 			Hostname:     "t2j-kafka",
 			ExposedPorts: []string{"9094:9094/tcp"},

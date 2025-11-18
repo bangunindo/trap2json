@@ -3,17 +3,18 @@ package snmp
 import (
 	"bytes"
 	"encoding/csv"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/bangunindo/trap2json/metrics"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"github.com/sleepinggenius2/gosmi"
 	"github.com/sleepinggenius2/gosmi/types"
-	"regexp"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 )
 
 type Header int8

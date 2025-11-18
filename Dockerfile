@@ -1,9 +1,9 @@
-FROM golang:1.24.1 AS buildStage
+FROM golang:1.25.4 AS buildStage
 COPY go.mod go.sum /source_code/
 WORKDIR /source_code
 RUN go mod download
 COPY . .
-RUN go build -o /trap2json github.com/bangunindo/trap2json
+RUN GOEXPERIMENT=greenteagc go build -o /trap2json github.com/bangunindo/trap2json
 RUN chmod +x /trap2json
 
 FROM ubuntu:24.04
