@@ -1,9 +1,18 @@
 package snmp
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestMessage_UnmarshalText_Issue31(t *testing.T) {
+	var m Message
+	err := m.UnmarshalText([]byte(`172.28.42.43|UDP: [172.17.1.65]:33332->[172.17.1.66]:10162|1763411072|4320884|Enterprise Specific|.1.3.6.1.4.1.8072.2.3.0.1|TRAP, SNMP v1, community public|6|.17|`))
+	if assert.NoError(t, err) {
+		assert.Equal(t, int64(17), *m.Payload.TrapSubType)
+	}
+}
 
 func TestMessage_UnmarshalText(t *testing.T) {
 	var m Message
