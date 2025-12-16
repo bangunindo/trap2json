@@ -8,7 +8,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/essentialkaos/go-zabbix v1.1.5
-	github.com/expr-lang/expr v1.17.6
+	github.com/expr-lang/expr v1.17.7
 	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/go-json-experiment/json v0.0.0-20251027170946-4849db3c2f7e
 	github.com/go-sql-driver/mysql v1.9.3
