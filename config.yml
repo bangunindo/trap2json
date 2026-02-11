@@ -187,7 +187,7 @@ forwarders:
       # default: 1s
       batch_timeout: 1s
   - id: mqtt
-    # kafka forwarder doesn't support auth yet
+    # mqtt forwarder doesn't support auth yet
     mqtt:
       # list of mqtt broker hosts
       hosts:
